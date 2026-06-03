@@ -1,0 +1,8 @@
+*.exe
+*.json
+*.jsonl
+*.log
+*.txt
+
+.agent/
+agent.local.toml
