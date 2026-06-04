@@ -13,6 +13,7 @@ let YELLOW = "\x1b[33m";
 let RED = "\x1b[31m";
 let ENTER_ALT_SCREEN = "\x1b[?1049h";
 let LEAVE_ALT_SCREEN = "\x1b[?1049l";
+let SPINNER = ["-", "\\", "|", "/"];
 
 function moveTo(row, col) {
   return "\x1b[" + String(row) + ";" + String(col) + "H";
@@ -105,6 +106,20 @@ function splitAtChar(text, index) {
     before: list.slice(0, index).join(""),
     after: list.slice(index).join(""),
   };
+}
+
+function loadingFrame(tick) {
+  return SPINNER[tick % SPINNER.length];
+}
+
+function loadingText(active, tick, label, width) {
+  let text = "";
+  if (active) {
+    text = YELLOW + loadingFrame(tick) + RESET + " " + label;
+  } else {
+    text = GREEN + "ok" + RESET + " " + label;
+  }
+  return line(text, width);
 }
 
 function bannerLines(width) {
@@ -289,7 +304,7 @@ function render(state) {
   }
 
   let banner = bannerLines(cols);
-  let contentHeight = rows - banner.length - 8;
+  let contentHeight = rows - banner.length - 9;
   let logHeight = contentHeight - 4;
   if (logHeight < 4) {
     logHeight = 4;
@@ -301,6 +316,7 @@ function render(state) {
   }
   out.push(BOLD + CYAN + line("GS TUI Test Program", cols) + RESET);
   out.push(line("terminal=" + String(cols) + "x" + String(rows) + "  tick=" + String(state.tick) + "  focus=" + state.focus, cols));
+  out.push(loadingText(true, state.tick, "loading component demo", cols));
   out.push(repeatText("-", cols));
   out.push(BOLD + "Input" + RESET + "  type text, arrows, Tab, paste, Ctrl+R, Ctrl+L, Ctrl+Q");
   let parts = splitAtChar(state.input, state.cursor);
@@ -408,6 +424,9 @@ function selfTest() {
   let clean = stripAnsi(BOLD + "ok" + RESET);
   if (clean !== "ok") {
     throw new Error("bad ansi strip: " + JSON.stringify(clean));
+  }
+  if (loadingFrame(0) !== "-" || loadingFrame(2) !== "|") {
+    throw new Error("bad loading frame");
   }
   let state = createState();
   pushEvent(state, "self test");

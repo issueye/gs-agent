@@ -1,6 +1,7 @@
 import { parseKeys } from "@/tui/keys";
 import { renderFrame } from "@/tui/renderer";
 import { createScreenRenderer } from "@/tui/screen";
+import { loadingFrame, loadingText } from "@/tui/loading";
 
 function assert(cond, message) {
   if (!cond) {
@@ -18,6 +19,9 @@ let zhKeys = parseKeys("你好");
 assert(zhKeys.length === 2, "zh key count");
 assert(zhKeys[0].text === "你", "zh first");
 assert(zhKeys[1].text === "好", "zh second");
+assert(loadingFrame(0) === "-", "loading frame 0");
+assert(loadingFrame(2) === "|", "loading frame 2");
+assert(loadingText({ active: true, tick: 1, label: "run", width: 12 }).includes("run"), "loading text");
 
 let state = {
   app: {
@@ -61,11 +65,18 @@ let state = {
         },
       },
     },
+    {
+      kind: "answer",
+      payload: {
+        content: "最终答案",
+        file: ".agent/answer.md",
+      },
+    },
   ],
-  selectedEvent: 1,
+  selectedEvent: 2,
   eventScroll: 0,
   detailScroll: 0,
-  answer: "",
+  answer: "最终答案",
   error: "",
 };
 
@@ -74,7 +85,25 @@ assert(frame.includes("gs-agent"), "header");
 assert(frame.includes("GS-AGENT") || frame.includes("____"), "banner");
 assert(frame.includes("read_file"), "tool event");
 assert(frame.includes("Details"), "details");
+assert(frame.includes("Input workspace/task.txt"), "composer");
 assert(frame.includes("读取 README.md 并总结"), "zh render");
+assert(frame.includes("answer=ready"), "answer status");
+assert(frame.includes("最终答案"), "answer render");
+
+let longState = state;
+longState.taskText = "你能干什么".repeat(30);
+longState.cursorCol = 20;
+longState.focus = "task";
+let longFrame = renderFrame(longState);
+let frameLines = longFrame.split("\n");
+let inputLines = [];
+for (let row of frameLines) {
+  if (row.startsWith("> ")) {
+    inputLines.push(row);
+  }
+}
+assert(inputLines.length === 1, "one composer input line");
+assert(!inputLines[0].includes("|Run Timeline"), "composer isolated from timeline");
 
 let writes = [];
 let fakeSession = {

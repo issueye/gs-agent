@@ -1,0 +1,15 @@
+[agent]
+provider = "anthropic"
+system = "You are a concise coding agent. Use tools when useful. Complete the user's requested task and stop when you have a final answer."
+maxTurns = 10
+includeCodingTools = true
+tools = ["read_file", "list_dir", "grep"]
+taskFile = "workspace/task.txt"
+
+[llm.anthropic]
+apiKey = "sk-..."
+baseUrl = "https://api.deepseek.com/anthropic"
+model = "deepseek-v4-flash"
+maxTokens = 1024
+timeoutMs = 60000
+thinking = "disabled"
