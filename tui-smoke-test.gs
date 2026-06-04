@@ -1,0 +1,94 @@
+import { parseKeys } from "@/tui/keys";
+import { renderFrame } from "@/tui/renderer";
+import { createScreenRenderer } from "@/tui/screen";
+
+function assert(cond, message) {
+  if (!cond) {
+    throw new Error(message);
+  }
+}
+
+let keys = parseKeys("\x12\x13\x1b[Aa");
+assert(keys.length === 4, "key count");
+assert(keys[0].id === "ctrl+r", "ctrl+r");
+assert(keys[1].id === "ctrl+s", "ctrl+s");
+assert(keys[2].id === "up", "up");
+assert(keys[3].text === "a", "text");
+let zhKeys = parseKeys("你好");
+assert(zhKeys.length === 2, "zh key count");
+assert(zhKeys[0].text === "你", "zh first");
+assert(zhKeys[1].text === "好", "zh second");
+
+let state = {
+  app: {
+    taskFile: "workspace/task.txt",
+    agent: {
+      provider: "anthropic",
+      maxTurns: 10,
+      tools: ["read_file"],
+    },
+    config: {
+      llm: {
+        anthropic: {
+          model: "deepseek-v4-flash",
+        },
+      },
+    },
+  },
+  cols: 80,
+  rows: 24,
+  taskText: "读取 README.md 并总结",
+  taskScroll: 0,
+  cursorLine: 0,
+  cursorCol: 0,
+  dirty: false,
+  running: false,
+  focus: "timeline",
+  events: [
+    {
+      kind: "message",
+      payload: {
+        role: "user",
+        content: "hello",
+      },
+    },
+    {
+      kind: "tool_call",
+      payload: {
+        name: "read_file",
+        args: {
+          path: "README.md",
+        },
+      },
+    },
+  ],
+  selectedEvent: 1,
+  eventScroll: 0,
+  detailScroll: 0,
+  answer: "",
+  error: "",
+};
+
+let frame = renderFrame(state);
+assert(frame.includes("gs-agent"), "header");
+assert(frame.includes("GS-AGENT") || frame.includes("____"), "banner");
+assert(frame.includes("read_file"), "tool event");
+assert(frame.includes("Details"), "details");
+assert(frame.includes("读取 README.md 并总结"), "zh render");
+
+let writes = [];
+let fakeSession = {
+  write: function(text) {
+    writes.push(text);
+  },
+};
+let screen = createScreenRenderer(fakeSession);
+screen.render("a\nb\nc", 3, 10);
+screen.render("a\nB\nc", 3, 10);
+assert(writes.length === 2, "screen writes");
+assert(writes[0].includes("\x1b[2J"), "first full clear");
+assert(!writes[1].includes("\x1b[2J"), "second no full clear");
+assert(writes[1].includes("\x1b[2;1H"), "changed row move");
+assert(!writes[1].includes("\x1b[1;1H"), "unchanged row skipped");
+
+println("tui smoke ok");

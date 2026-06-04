@@ -12,7 +12,10 @@
 - `src/agent/llm`：Anthropic 兼容 provider，以及显式测试用 fake provider。
 - `src/agent/tools`：文件、目录、grep、bash、workspace task 工具。
 - `src/agent/session`：JSONL session 事件记录。
+- `src/tui`：终端交互界面，包含按键解析、ANSI 输出、布局和渲染。
+- `tui.gs`：TUI 入口。
 - `docs/plans/2026-06-04-tui-design.md`：TUI 交互界面设计。
+- `docs/plans/2026-06-04-gs-tui-development-plan.md`：GS TUI 开发计划。
 - `stream-test.gs`：真实 streaming endpoint smoke test。
 
 ## 运行
@@ -53,6 +56,51 @@ E:\codes\gts\dist\gs.exe --timeout 60s run
 运行后会生成 `.agent/session.jsonl`。
 最终回答会同时保存到 `.agent/answer.md`。
 
+运行 TUI：
+
+```powershell
+E:\codes\gts\dist\gs.exe --timeout 0 tui.gs
+```
+
+TUI 快捷键：
+
+- `Ctrl+R`：保存当前任务并运行 agent。
+- `Ctrl+S`：保存任务。
+- `Ctrl+O`：加载最近 session。
+- `Tab`：切换任务区、时间线、详情区焦点。
+- `Esc` / `Ctrl+C`：退出并恢复终端状态。
+
+## TUI 测试程序
+
+`programs/gs-tui-test` 是一个独立的终端测试程序，不调用模型，用来验证 GoScript 的 raw input、ANSI 渲染、resize、timer、Bracketed Paste 和可执行文件打包。
+程序运行时会进入终端备用屏幕，顶部显示响应式 ASCII banner，刷新会发生在当前窗口内；退出后恢复原 PowerShell 屏幕，滚动历史里不会堆积每一帧。渲染使用屏幕缓冲 diff，只重写变化行，避免整屏闪烁。
+
+源码自检：
+
+```powershell
+E:\codes\gts\dist\gs.exe --timeout 20s programs\gs-tui-test\main.gs --self-test
+```
+
+构建独立可执行文件：
+
+```powershell
+E:\codes\gts\dist\gs.exe --timeout 60s dist programs\gs-tui-test dist\gs-tui-test.exe
+```
+
+运行打包后的自检：
+
+```powershell
+.\dist\gs-tui-test.exe -- --self-test
+```
+
+进入交互测试：
+
+```powershell
+.\dist\gs-tui-test.exe
+```
+
+交互测试中可输入文本、方向键、Tab、粘贴、多次调整窗口大小；`Ctrl+L` 清日志，`Ctrl+Q`、`Ctrl+C` 或 `Esc` 退出。
+
 默认只启用只读代码工具：
 
 ```toml
@@ -72,6 +120,7 @@ tools = ["read_file", "list_dir", "grep", "write_file", "bash"]
 ```powershell
 E:\codes\gts\dist\gs.exe --timeout 20s smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s provider-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s tui-smoke-test.gs
 ```
 
 ## 修改任务

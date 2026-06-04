@@ -67,14 +67,34 @@ function agentConfig(config) {
   return agent;
 }
 
-// 真实任务来自 workspace/task.txt；这里把文件名和内容一起交给模型，便于 session 回放。
-function readTaskPrompt(root, taskFile) {
+// TUI 和命令行共用的任务读取函数；TUI 启动时允许文件尚不存在。
+export function readTaskText(root, taskFile) {
   let target = path.resolve(path.join(root, taskFile));
   if (!fs.existsSync(target)) {
+    return "";
+  }
+  return fs.readFileSync(target);
+}
+
+// 保存任务时一并创建目录，避免首次运行没有 workspace 目录。
+export function writeTaskText(root, taskFile, text) {
+  let target = path.resolve(path.join(root, taskFile));
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeTextSync(target, text);
+  return target;
+}
+
+// 真实任务来自 workspace/task.txt；这里把文件名和内容一起交给模型，便于 session 回放。
+export function taskPrompt(root, taskFile, taskText) {
+  if (!taskText) {
+    taskText = readTaskText(root, taskFile);
+  }
+
+  if (taskText.trim() === "") {
     throw new ReferenceError("task file not found: " + taskFile);
   }
 
-  let task = fs.readFileSync(target).trim();
+  let task = taskText.trim();
   if (task === "") {
     throw new ReferenceError("task file is empty: " + taskFile);
   }
@@ -82,39 +102,72 @@ function readTaskPrompt(root, taskFile) {
   return "Project root: .\nTask file: " + taskFile + "\n\n" + task + "\n\nUse read_task only for the task file. Use list_dir/read_file/grep on the project root when inspecting this agent project.";
 }
 
-// 应用级装配点：配置、工具、provider、session 和 agent loop 都在这里连起来。
-export function runAgentApp() {
-  let root = process.cwd();
+// 应用级装配点：配置、工具、provider、session 路径和 workspace 都在这里连起来。
+export function loadAgentApp(root) {
+  if (!root) {
+    root = process.cwd();
+  }
+
   let config = readConfig(root);
   let agent = agentConfig(config);
   let workspace = path.join(root, "workspace");
   let sessionFile = path.join(root, ".agent", "session.jsonl");
+  let answerFile = path.join(root, ".agent", "answer.md");
 
+  return {
+    root: root,
+    config: config,
+    agent: agent,
+    workspace: workspace,
+    taskFile: agent.taskFile,
+    sessionFile: sessionFile,
+    answerFile: answerFile,
+  };
+}
+
+// TUI 和命令行共用的真实运行入口；调用方可传入 taskText 和 onEvent。
+export function runAgentTask(options) {
+  let app = options.app;
+  if (!app) {
+    app = loadAgentApp(options.root);
+  }
+
+  let sessionFile = app.sessionFile;
   // 每次运行生成一份新的 session，避免旧事件干扰本次排查。
   if (fs.existsSync(sessionFile)) {
     fs.unlinkSync(sessionFile);
   }
 
   let kit = createCodingAgent({
-    cwd: root,
-    includeCodingTools: agent.includeCodingTools,
-    enabledTools: agent.tools,
-    provider: createProvider(config, agent),
-    tools: createWorkspaceTools(workspace),
+    cwd: app.root,
+    includeCodingTools: app.agent.includeCodingTools,
+    enabledTools: app.agent.tools,
+    provider: createProvider(app.config, app.agent),
+    tools: createWorkspaceTools(app.workspace),
     sessionFile: sessionFile,
-    maxTurns: agent.maxTurns,
+    maxTurns: app.agent.maxTurns,
+    onEvent: options.onEvent,
   });
 
   // agent.run 是同步闭环：模型 -> 工具 -> 模型，直到最终回答或达到 maxTurns。
-  let answer = kit.agent.run(readTaskPrompt(root, agent.taskFile));
+  let answer = kit.agent.run(taskPrompt(app.root, app.agent.taskFile, options.taskText));
   let records = kit.session.readAll();
-  let answerFile = path.join(root, ".agent", "answer.md");
-  fs.writeTextSync(answerFile, answer.content + "\n");
+  fs.mkdirSync(path.dirname(app.answerFile), { recursive: true });
+  fs.writeTextSync(app.answerFile, answer.content + "\n");
 
   return {
     answer: answer.content,
     events: records.length,
     sessionFile: sessionFile,
-    answerFile: answerFile,
+    answerFile: app.answerFile,
   };
+}
+
+// 保持现有命令行入口行为不变。
+export function runAgentApp() {
+  let app = loadAgentApp(process.cwd());
+  return runAgentTask({
+    app: app,
+    taskText: readTaskText(app.root, app.taskFile),
+  });
 }
