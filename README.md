@@ -12,6 +12,7 @@
 - `src/agent/llm`：Anthropic 兼容 provider，以及显式测试用 fake provider。
 - `src/agent/tools`：文件、目录、grep、bash、workspace task 工具。
 - `src/agent/session`：JSONL session 事件记录。
+- `docs/plans/2026-06-04-tui-design.md`：TUI 交互界面设计。
 - `stream-test.gs`：真实 streaming endpoint smoke test。
 
 ## 运行
