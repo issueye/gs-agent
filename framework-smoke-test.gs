@@ -48,7 +48,7 @@ let fakeTimers = {
   sleep: function(ms) {
     if (callbacks.onInput) {
       callbacks.onInput("好");
-      callbacks.onInput("\x11");
+      callbacks.onInput("\x03");
       callbacks.onInput = undefined;
     }
   },
@@ -81,7 +81,7 @@ let state = runTuiApp({
     if (key.id === "text") {
       state.text = state.text + key.text;
     }
-    if (key.id === "ctrl+q") {
+    if (key.id === "ctrl+c") {
       state.shouldExit = true;
     }
   },
@@ -141,6 +141,48 @@ assert(writes.join("\n").includes("\x1b[?1049l"), "render error leaves alternate
 assert(writes.join("\n").includes("drain:80:10"), "render error drains input");
 assert(writes.join("\n").includes("stop"), "render error stops session");
 
+writes = [];
+startedConfig = undefined;
+callbacks = {};
+let plainState = runTuiApp({
+  name: "framework plain screen smoke",
+  title: "framework plain screen smoke",
+  terminal: fakeTerminal,
+  timers: {
+    setInterval: fakeTimers.setInterval,
+    clearInterval: fakeTimers.clearInterval,
+    sleep: function(ms) {
+      if (callbacks.onInput) {
+        callbacks.onInput("\x03");
+        callbacks.onInput = undefined;
+      }
+    },
+  },
+  alternateScreen: false,
+  mouse: false,
+  tickMs: 0,
+  createState: function(size) {
+    return {
+      cols: size.cols,
+      rows: size.rows,
+      shouldExit: false,
+    };
+  },
+  render: function(state) {
+    return line("plain", state.cols);
+  },
+  onKey: function(state, key) {
+    if (key.id === "ctrl+c") {
+      state.shouldExit = true;
+    }
+  },
+});
+let plainWrites = writes.join("\n");
+assert(!plainWrites.includes("\x1b[?1049h"), "plain screen does not enter alternate screen");
+assert(!plainWrites.includes("\x1b[?1006h"), "plain screen does not enable mouse");
+assert(!plainWrites.includes("\x1b[?1049l"), "plain screen does not leave alternate screen");
+assert(plainWrites.includes("\x1b[2J"), "plain screen clears on exit");
+
 let box = Box({
   width: 20,
   height: 4,
@@ -148,7 +190,7 @@ let box = Box({
   content: ["hello"],
 });
 assert(box.length === 4, "box height");
-assert(stripAnsi(box[0]).startsWith("+ Box "), "box title");
+assert(stripAnsi(box[0]).includes(" Box "), "box title");
 
 let input = Input({
   width: 20,
@@ -174,16 +216,18 @@ let mdTable = Markdown({
   width: 100,
   text: "| 日期 | 天气 | 气温范围 |\n| --- | --- | --- |\n| 6月5日 | 多云 | 27C ~ 32C |\n| 6月6日 | 小雨 | 26C ~ 34C |",
 });
-let tableRule = "";
+let tableText = stripAnsi(mdTable.join("\n"));
+let tableWidthOk = true;
 for (let row of mdTable) {
   let clean = stripAnsi(row);
-  if (clean.trim().startsWith("---")) {
-    tableRule = clean;
-    break;
+  if (clean.trim() !== "") {
+    if (visibleWidth(clean.trim()) > 80) {
+      tableWidthOk = false;
+    }
   }
 }
-assert(tableRule !== "", "markdown table rule rendered");
-assert(visibleWidth(tableRule.trim()) <= 80, "markdown table width capped");
+assert(tableText.includes("日期"), "markdown table rendered");
+assert(tableWidthOk, "markdown table width capped");
 
 let loading = Loading({
   width: 16,

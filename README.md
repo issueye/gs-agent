@@ -43,11 +43,13 @@ apiKey = "sk-..."
 baseUrl = "https://api.deepseek.com/anthropic"
 model = "deepseek-v4-flash"
 maxTokens = 1024
+contextTokenThreshold = 258000
 timeoutMs = 60000
 thinking = "disabled"
 ```
 
 `baseUrl` 可填写服务根路径、`/v1` 路径，或完整 `/v1/messages` endpoint。
+`contextTokenThreshold` 是上下文重建阈值：估算消息 token 数未达到阈值时保留完整会话；达到阈值后保留最近几轮原文，将更早内容压缩为摘要，并通过 session archive 工具按需查询旧原文。
 
 运行 agent：
 

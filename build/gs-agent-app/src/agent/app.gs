@@ -87,6 +87,22 @@ function modelInfo(app) {
   };
 }
 
+function contextTokenThreshold(config, agent) {
+  if (agent.contextTokenThreshold) {
+    return agent.contextTokenThreshold;
+  }
+
+  if (config.llm) {
+    if (config.llm.anthropic) {
+      if (config.llm.anthropic.contextTokenThreshold) {
+        return config.llm.anthropic.contextTokenThreshold;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 function createAppKit(app, logger, onEvent) {
   return createCodingAgent({
     cwd: app.root,
@@ -95,6 +111,8 @@ function createAppKit(app, logger, onEvent) {
     provider: createProvider(app.config, app.agent),
     tools: createWorkspaceTools(app.workspace),
     sessionFile: app.sessionFile,
+    sessionArchiveFile: app.sessionArchiveFile,
+    contextTokenThreshold: contextTokenThreshold(app.config, app.agent),
     maxTurns: app.agent.maxTurns,
     onEvent: function(event) {
       logger.info("agent event", eventLogFields(event));
@@ -150,6 +168,7 @@ export function loadAgentApp(root) {
   let agent = agentConfig(config);
   let workspace = path.join(root, "workspace");
   let sessionFile = path.join(root, ".agent", "session.jsonl");
+  let sessionArchiveFile = path.join(root, ".agent", "session.messages.jsonl");
   let answerFile = path.join(root, ".agent", "answer.md");
   let logs = logPaths(root);
 
@@ -160,6 +179,7 @@ export function loadAgentApp(root) {
     workspace: workspace,
     taskFile: agent.taskFile,
     sessionFile: sessionFile,
+    sessionArchiveFile: sessionArchiveFile,
     answerFile: answerFile,
     logFile: logs.file,
     latestLogFile: logs.latest,
@@ -182,6 +202,9 @@ export function runAgentTask(options) {
   if (fs.existsSync(sessionFile)) {
     fs.unlinkSync(sessionFile);
   }
+  if (app.sessionArchiveFile && fs.existsSync(app.sessionArchiveFile)) {
+    fs.unlinkSync(app.sessionArchiveFile);
+  }
 
   let info = modelInfo(app);
   logger.info("agent run started", {
@@ -193,6 +216,7 @@ export function runAgentTask(options) {
     tools: app.agent.tools,
     taskFile: app.taskFile,
     sessionFile: sessionFile,
+    sessionArchiveFile: app.sessionArchiveFile,
     answerFile: app.answerFile,
   });
 
@@ -215,6 +239,7 @@ export function runAgentTask(options) {
       answer: answer.content,
       events: records.length,
       sessionFile: sessionFile,
+      sessionArchiveFile: app.sessionArchiveFile,
       answerFile: app.answerFile,
       logFile: app.logFile,
       latestLogFile: app.latestLogFile,
@@ -258,6 +283,7 @@ export function runAgentTurn(options) {
     tools: app.agent.tools,
     messages: messages.length,
     sessionFile: app.sessionFile,
+    sessionArchiveFile: app.sessionArchiveFile,
     answerFile: app.answerFile,
   });
 
@@ -280,6 +306,7 @@ export function runAgentTurn(options) {
       messages: messages,
       events: records.length,
       sessionFile: app.sessionFile,
+      sessionArchiveFile: app.sessionArchiveFile,
       answerFile: app.answerFile,
       logFile: app.logFile,
       latestLogFile: app.latestLogFile,

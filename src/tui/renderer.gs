@@ -1,4 +1,5 @@
 import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, padRight, repeatText, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
+import { estimateContextTokens } from "@/agent/core/context";
 import { compactLoading } from "@/tui/loading";
 import { Markdown } from "@/tui/components";
 import { banner, border, clampScroll, joinColumns, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
@@ -8,6 +9,72 @@ function safeText(value) {
     return "";
   }
   return String(value);
+}
+
+function parseJsonText(text) {
+  let value = undefined;
+  try {
+    value = JSON.parse(String(text));
+  } catch (err) {
+    return undefined;
+  }
+  return value;
+}
+
+function displayText(value) {
+  let text = safeText(value);
+  if (text === "") {
+    return "";
+  }
+  let parsed = parseJsonText(text);
+  if (typeof parsed === "string") {
+    return parsed;
+  }
+  // 有些兼容接口会把最终回答包成 JSON 字符串文本；展示前解掉外层引号和常见转义。
+  if (text.length >= 2) {
+    if (text.slice(0, 1) === "\"" && text.slice(text.length - 1) === "\"") {
+      text = text.slice(1, text.length - 1);
+    }
+  }
+  text = text.replaceAll("\\r\\n", "\n");
+  text = text.replaceAll("\\n", "\n");
+  text = text.replaceAll("\\t", "  ");
+  text = text.replaceAll("\\\"", "\"");
+  return text;
+}
+
+function toolResultText(content) {
+  let parsed = parseJsonText(content);
+  if (!parsed) {
+    return displayText(content);
+  }
+
+  if (parsed.ok === false) {
+    if (parsed.error) {
+      return "error: " + safeText(parsed.error);
+    }
+  }
+
+  let result = parsed.result;
+  if (!result) {
+    return displayText(content);
+  }
+  if (typeof result === "string") {
+    return result;
+  }
+  if (result.text) {
+    return safeText(result.text);
+  }
+  if (result.content) {
+    return safeText(result.content);
+  }
+  if (result.entries) {
+    return safeText(result.path) + ": " + result.entries.join(", ");
+  }
+  if (result.path) {
+    return safeText(result.path);
+  }
+  return JSON.stringify(result);
 }
 
 function welcomePanel(state, width) {
@@ -34,14 +101,34 @@ function welcomePanel(state, width) {
   if (topFill < 0) {
     topFill = 0;
   }
-  let top = "+" + styleText(title, { bold: true, fg: "warning" }) + repeatText("-", topFill) + styleText(version, { dim: true, fg: "muted" }) + "+";
+  let top = "┌" + styleText(title, { bold: true, fg: "warning" }) + repeatText("─", topFill) + styleText(version, { dim: true, fg: "muted" }) + "┐";
+  let index = 0;
+  if (state.tick) {
+    index = state.tick % 4;
+  }
+  let eyes = "■■";
+  if (index === 1) {
+    eyes = "━━";
+  } else if (index === 2) {
+    eyes = "●●";
+  }
+  let tail = "╲";
+  if (index === 3) {
+    tail = "╱";
+  }
+  let pet = [
+    "  /\\_/\\   " + tail,
+    " ( " + eyes + " )  ",
+    " /|___|\\  ",
+    "  /   \\   ",
+  ];
   let rows = [];
   rows.push(line(top, width));
-  rows.push(color("|", "warning") + line(" Welcome back!  Continue the session, call tools, and refine the answer.", inner) + color("|", "warning"));
-  rows.push(color("|", "warning") + line(" Tips: Ctrl+R send message  Ctrl+O load session  Tab focus  mouse wheel scroll", inner) + color("|", "warning"));
-  rows.push(color("|", "warning") + line(" Model: " + model + "  Project: " + root, inner) + color("|", "warning"));
-  rows.push(color("|", "warning") + line(" Input starts from " + state.app.taskFile + "; after sending, type the next question directly.", inner) + color("|", "warning"));
-  rows.push(line(color("+" + repeatText("-", width - 2) + "+", "warning"), width));
+  rows.push(color("│", "warning") + styleText(line(pet[0], 13), { bold: true, fg: "warning" }) + line(" model=" + model, inner - 13) + color("│", "warning"));
+  rows.push(color("│", "warning") + styleText(line(pet[1], 13), { bold: true, fg: "warning" }) + line(" project=" + root, inner - 13) + color("│", "warning"));
+  rows.push(color("│", "warning") + styleText(line(pet[2], 13), { bold: true, fg: "warning" }) + line(" Enter send  Ctrl+O load session  Tab focus", inner - 13) + color("│", "warning"));
+  rows.push(color("│", "warning") + styleText(line(pet[3], 13), { bold: true, fg: "warning" }) + line("", inner - 13) + color("│", "warning"));
+  rows.push(line(color("└" + repeatText("─", width - 2) + "┘", "warning"), width));
   return rows;
 }
 
@@ -129,6 +216,47 @@ function configLabel(state) {
   return "gs-agent  provider=" + agent.provider + "  model=" + model + "  maxTurns=" + String(agent.maxTurns) + "  tools=" + String(toolCount);
 }
 
+function contextThreshold(state) {
+  if (state.app.agent) {
+    if (state.app.agent.contextTokenThreshold) {
+      return state.app.agent.contextTokenThreshold;
+    }
+  }
+  if (state.app.config) {
+    if (state.app.config.llm) {
+      if (state.app.config.llm.anthropic) {
+        if (state.app.config.llm.anthropic.contextTokenThreshold) {
+          return state.app.config.llm.anthropic.contextTokenThreshold;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function compactNumber(value) {
+  if (value >= 1000000) {
+    return String(Math.round(value / 100000) / 10) + "m";
+  }
+  if (value >= 1000) {
+    return String(Math.round(value / 100) / 10) + "k";
+  }
+  return String(value);
+}
+
+function contextUsageText(state) {
+  let threshold = contextThreshold(state);
+  if (!threshold) {
+    return "";
+  }
+  let used = estimateContextTokens(state.messages || []);
+  let percent = 0;
+  if (threshold > 0) {
+    percent = Math.floor(used * 1000 / threshold) / 10;
+  }
+  return "  ctx=" + compactNumber(used) + "/" + compactNumber(threshold) + " " + String(percent) + "%";
+}
+
 function statusText(state) {
   let run = "idle";
   if (state.running) {
@@ -154,7 +282,7 @@ function statusText(state) {
   if (state.messages) {
     messages = "  messages=" + String(state.messages.length);
   }
-  return run + dirty + "  events=" + String(state.events.length) + messages + answer + error + log;
+  return run + dirty + "  events=" + String(state.events.length) + messages + contextUsageText(state) + answer + error + log;
 }
 
 function drawTask(state, width, height) {
@@ -228,9 +356,10 @@ function drawComposer(state, width, height) {
   let lines = splitLines(state.taskText);
   let current = takeLine(lines, state.cursorLine);
   let currentLine = state.cursorLine + 1;
-  let title = "Prompt  line " + String(currentLine) + "/" + String(lines.length);
+  let hint = "Prompt  line " + String(currentLine) + "/" + String(lines.length) + "  Enter send  Ctrl+R send";
   let out = [];
-  out.push(styleText(title, { bold: true, fg: "text" }) + styleText("  Ctrl+R to send", { dim: true, fg: "muted" }));
+  out.push(styleText(line(hint, width), { dim: true, fg: "muted" }));
+  out.push(styleText(border(width, "─"), { fg: "border" }));
 
   // 输入区固定占用整行宽度，避免编辑文本挤到右侧 Timeline 区域。
   let inputWidth = width - 2;
@@ -238,13 +367,14 @@ function drawComposer(state, width, height) {
     inputWidth = 1;
   }
   out.push("> " + takeAroundCursor(current, state.cursorCol, inputWidth));
+  out.push(styleText(border(width, "─"), { fg: "border" }));
 
-  if (height > 2) {
-    let summary = "esc to quit  chars=" + String(chars(state.taskText).length) + "  width=" + String(visibleWidth(current));
+  if (height > 4) {
+    let summary = "Ctrl+C to quit  chars=" + String(chars(state.taskText).length) + "  width=" + String(visibleWidth(current));
     if (state.focus !== "task") {
       summary = summary + "  focus=" + state.focus;
     }
-    out.push(styleText(summary, { dim: true, fg: "muted" }));
+    out.push(styleText(line(summary, width), { dim: true, fg: "muted" }));
   }
 
   while (out.length < height) {
@@ -286,6 +416,26 @@ function compactJson(value) {
   return text;
 }
 
+function transcriptContentWidth(width) {
+  let max = 88;
+  let gutter = 8;
+  let available = width - gutter;
+  if (available < 32) {
+    available = width - 1;
+  }
+  if (available < 20) {
+    available = 20;
+  }
+  if (available > max) {
+    return max;
+  }
+  return available;
+}
+
+function transcriptLine(text, contentWidth, fullWidth) {
+  return line(line(text, contentWidth), fullWidth);
+}
+
 function transcriptRows(state, width) {
   if (state.transcriptCache) {
     if (state.transcriptCache.width === width && state.transcriptCache.events === state.events.length) {
@@ -305,6 +455,7 @@ function transcriptRows(state, width) {
     return out;
   }
 
+  let lastAssistantText = "";
   for (let event of state.events) {
     let payload = event.payload;
     if (!payload) {
@@ -313,21 +464,22 @@ function transcriptRows(state, width) {
 
     if (event.kind === "message") {
       if (payload.role === "user") {
-        out.push(styleText(line("> " + safeText(payload.content).split("\n")[0], width), { inverse: true }));
+        out.push(styleText(transcriptLine("> " + safeText(payload.content).split("\n")[0], width, width), { inverse: true }));
         let rest = splitLines(safeText(payload.content));
         for (let i = 1; i < rest.length; i = i + 1) {
-          out.push(styleText(line("  " + rest[i], width), { inverse: true }));
+          out.push(styleText(transcriptLine("  " + rest[i], width, width), { inverse: true }));
         }
         out.push("");
         continue;
       }
       if (payload.role === "assistant") {
+        lastAssistantText = displayText(payload.content);
         let md = Markdown({
           width: width - 2,
-          text: safeText(payload.content),
+          text: lastAssistantText,
         });
         for (let row of md) {
-          out.push(line("  " + row, width));
+          out.push(transcriptLine("  " + row, width, width));
         }
         out.push("");
         continue;
@@ -336,29 +488,33 @@ function transcriptRows(state, width) {
 
     if (event.kind === "tool_call") {
       let label = "Tool(" + safeText(payload.name) + ")";
-      out.push(color("* ", "success") + styleText(label, { bold: true, fg: "text" }) + styleText(" " + compactJson(payload.args), { dim: true, fg: "muted" }));
+      out.push(transcriptLine(color("* ", "success") + styleText(label, { bold: true, fg: "text" }) + styleText(" " + compactJson(payload.args), { dim: true, fg: "muted" }), width, width));
       continue;
     }
 
     if (event.kind === "tool_result") {
-      pushWrappedWithPrefix(out, "  | ", truncateToWidth(safeText(payload.content), width * 2), width, { dim: true, fg: "muted" });
+      pushWrappedWithPrefix(out, "  | ", truncateToWidth(toolResultText(payload.content), width * 2), width, { dim: true, fg: "muted" });
       continue;
     }
 
     if (event.kind === "answer") {
+      let answerText = displayText(payload.content);
+      if (lastAssistantText !== "" && answerText === lastAssistantText) {
+        continue;
+      }
       let answerRows = Markdown({
         width: width - 2,
-        text: safeText(payload.content),
+        text: answerText,
       });
       for (let row of answerRows) {
-        out.push(line("  " + row, width));
+        out.push(transcriptLine("  " + row, width, width));
       }
       out.push("");
       continue;
     }
 
     if (event.kind === "turn_end") {
-      out.push(styleText("  turn " + String(payload.turn) + " ended: " + safeText(payload.stop), { dim: true, fg: "muted" }));
+      out.push(transcriptLine(styleText("  turn " + String(payload.turn) + " ended: " + safeText(payload.stop), { dim: true, fg: "muted" }), width, width));
       continue;
     }
 
@@ -384,20 +540,22 @@ function drawTranscript(state, width, height) {
   if (bodyHeight < 1) {
     bodyHeight = 1;
   }
-  let rows = transcriptRows(state, width - 1);
+  let contentWidth = transcriptContentWidth(width);
+  let rows = transcriptRows(state, contentWidth);
   let maxScroll = rows.length - bodyHeight;
   if (maxScroll < 0) {
     maxScroll = 0;
   }
   let offset = clampScroll(state.detailScroll, maxScroll);
+  state.detailScroll = offset;
   let out = [];
-  out.push(styleText(scrollTitle("Transcript", offset, bodyHeight, rows.length), { bold: true, fg: "text" }));
+  out.push(styleText("Transcript", { bold: true, fg: "text" }));
   for (let i = 0; i < bodyHeight; i = i + 1) {
     out.push(takeLine(rows, offset + i));
   }
-  return addScrollbar(out.map(function(item) {
+  return out.map(function(item) {
     return line(item, width);
-  }), width, 1, offset, rows.length);
+  });
 }
 
 function drawTimeline(state, width, height) {
@@ -490,9 +648,9 @@ function addScrollbar(rows, width, headerRows, offset, total) {
     let marker = " ";
     if (i >= headerRows) {
       let pos = i - headerRows;
-      marker = "|";
+      marker = "│";
       if (pos >= thumbStart && pos < thumbStart + thumbSize) {
-        marker = "#";
+        marker = "┃";
       }
       marker = styleText(marker, { fg: "muted" });
     }
@@ -515,8 +673,8 @@ export function renderFrame(state) {
   let welcome = welcomePanel(state, cols);
   let header = line(configLabel(state), cols);
   let status = line(statusText(state), cols);
-  let footer = line("Ctrl+R Send  Ctrl+S Save  Ctrl+O Load Session  Tab Focus  Arrows/Page Scroll  Ctrl+Q/Esc Quit", cols);
-  let composerHeight = 3;
+  let footer = line("Ctrl+S Save  Ctrl+O Load Session  Tab Focus  Arrows/Page Scroll  Ctrl+C Quit", cols);
+  let composerHeight = 5;
   let available = rows - welcome.length - composerHeight - 4;
   if (available < 7) {
     available = 7;

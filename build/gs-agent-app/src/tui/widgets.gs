@@ -13,7 +13,7 @@ export function takeLine(lines, index) {
 
 export function border(width, char) {
   if (!char) {
-    char = "-";
+    char = "─";
   }
   return repeatText(char, width);
 }
@@ -91,7 +91,7 @@ export function joinColumns(left, right, leftWidth, rightWidth) {
     height = right.length;
   }
   for (let i = 0; i < height; i = i + 1) {
-    out.push(line(takeLine(left, i), leftWidth) + "|" + line(takeLine(right, i), rightWidth));
+    out.push(line(takeLine(left, i), leftWidth) + "│" + line(takeLine(right, i), rightWidth));
   }
   return out;
 }

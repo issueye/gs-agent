@@ -4,6 +4,7 @@ export function createAgent(options) {
   let session = options.session;
   let maxTurns = options.maxTurns;
   let onEvent = options.onEvent;
+  let contextSelector = options.contextSelector;
 
   if (!maxTurns) {
     maxTurns = 8;
@@ -42,17 +43,24 @@ export function createAgent(options) {
     for (let turn = 0; turn < maxTurns; turn = turn + 1) {
       emit("turn_start", { turn: turn });
       let allowTools = true;
-      let requestMessages = messages;
+      let requestMessages = messages.slice(0);
+      if (contextSelector) {
+        requestMessages = contextSelector(messages, { turn: turn, allowTools: allowTools });
+      }
 
       // 最后一轮给模型明确收束信号，避免真实模型持续探索工具直到 maxTurns 用尽。
       if (turn === maxTurns - 1) {
         allowTools = false;
         requestMessages = messages.slice(0);
+        if (contextSelector) {
+          requestMessages = contextSelector(messages, { turn: turn, allowTools: allowTools });
+        }
         let finalInstruction = {
           role: "user",
           content: "This is the final turn. Do not call tools. Provide the best concise final answer from the information already available.",
         };
         // 收束提示只参与本次请求，不写入长期对话历史，避免后续追问被内部提示污染。
+        requestMessages = requestMessages.slice(0);
         requestMessages.push(finalInstruction);
       }
 

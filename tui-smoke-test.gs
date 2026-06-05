@@ -1,8 +1,13 @@
 import { parseKeys } from "@/tui/keys";
-import { charWidth } from "@/tui/ansi";
+import { charWidth, stripAnsi, visibleWidth } from "@/tui/ansi";
 import { renderFrame } from "@/tui/renderer";
 import { createScreenRenderer } from "@/tui/screen";
 import { loadingFrame, loadingText } from "@/tui/loading";
+import { startNewSession } from "@/tui/app";
+
+let fs = require("@std/fs");
+let path = require("@std/path");
+let process = require("@std/process");
 
 function assert(cond, message) {
   if (!cond) {
@@ -10,12 +15,13 @@ function assert(cond, message) {
   }
 }
 
-let keys = parseKeys("\x12\x13\x1b[Aa");
-assert(keys.length === 4, "key count");
+let keys = parseKeys("\x12\x13\x1b[A\x1b[Fa");
+assert(keys.length === 5, "key count");
 assert(keys[0].id === "ctrl+r", "ctrl+r");
 assert(keys[1].id === "ctrl+s", "ctrl+s");
 assert(keys[2].id === "up", "up");
-assert(keys[3].text === "a", "text");
+assert(keys[3].id === "end", "end");
+assert(keys[4].text === "a", "text");
 let zhKeys = parseKeys("你好");
 assert(zhKeys.length === 2, "zh key count");
 assert(zhKeys[0].text === "你", "zh first");
@@ -42,6 +48,7 @@ let state = {
       llm: {
         anthropic: {
           model: "deepseek-v4-flash",
+          contextTokenThreshold: 258000,
         },
       },
     },
@@ -85,19 +92,64 @@ let state = {
   detailScroll: 0,
   answer: "最终答案",
   error: "",
+  messages: [
+    {
+      role: "user",
+      content: "hello",
+    },
+    {
+      role: "assistant",
+      content: "world",
+    },
+  ],
 };
+
+function copyState(base) {
+  return {
+    app: base.app,
+    cols: base.cols,
+    rows: base.rows,
+    taskText: base.taskText,
+    taskScroll: base.taskScroll,
+    cursorLine: base.cursorLine,
+    cursorCol: base.cursorCol,
+    dirty: base.dirty,
+    running: base.running,
+    focus: base.focus,
+    events: base.events,
+    selectedEvent: base.selectedEvent,
+    eventScroll: base.eventScroll,
+    detailScroll: base.detailScroll,
+    answer: base.answer,
+    error: base.error,
+    messages: base.messages,
+    transcriptCache: null,
+    transcriptMeasureCache: null,
+  };
+}
 
 let frame = renderFrame(state);
 assert(frame.includes("gs-agent"), "header");
-assert(frame.includes("Welcome back"), "welcome panel");
+assert(frame.includes("/\\_/\\"), "pixel pet header");
+assert(frame.includes("/|___|\\"), "pixel pet body");
+assert(frame.includes("model=deepseek-v4-flash"), "compact header model");
+let tickState = copyState(state);
+tickState.tick = 2;
+let tickFrame = renderFrame(tickState);
+assert(tickFrame !== frame, "cat header animates");
 assert(frame.includes("read_file"), "tool event");
 assert(frame.includes("Transcript"), "transcript");
 assert(frame.includes("#") || frame.includes("|"), "scrollbar render");
 assert(frame.includes("Prompt"), "composer");
+assert(frame.includes("Enter send"), "enter send hint");
+assert(frame.includes("Ctrl+C to quit"), "composer bottom hint");
 assert(frame.includes("读取 README.md 并总结"), "zh render");
 assert(frame.includes("answer=ready"), "answer status");
+assert(frame.includes("ctx="), "context usage status");
+assert(frame.includes("/258k"), "context threshold status");
+assert(frame.includes("%"), "context percent status");
 assert(frame.includes("最终答案"), "answer render");
-let markdownState = state;
+let markdownState = copyState(state);
 markdownState.events = [
   {
     kind: "answer",
@@ -113,7 +165,77 @@ assert(markdownFrame.includes("\x1b["), "details markdown styled");
 assert(markdownFrame.includes("python"), "details markdown code language");
 assert(markdownState.transcriptCache.rows.length > 0, "transcript cache populated");
 
-let longTranscriptState = state;
+let escapedState = copyState(state);
+escapedState.events = [
+  {
+    kind: "tool_result",
+    payload: {
+      name: "web_fetch",
+      content: "{\"ok\":true,\"name\":\"web_fetch\",\"result\":{\"text\":\"第一行\\n第二行\"}}",
+    },
+  },
+  {
+    kind: "message",
+    payload: {
+      role: "assistant",
+      content: "\"# 标题\\n\\n正文\"",
+    },
+  },
+];
+escapedState.detailScroll = 0;
+escapedState.transcriptCache = null;
+let escapedFrame = renderFrame(escapedState);
+let escapedRows = escapedState.transcriptCache.rows.join("\n");
+assert(escapedFrame.includes("第一行"), "tool result text rendered");
+assert(escapedFrame.includes("第二行"), "tool result newline decoded");
+assert(escapedFrame.includes("标题"), "assistant json string decoded");
+assert(!escapedRows.includes("{\"ok\":true"), "tool result json hidden");
+assert(!escapedRows.includes("\\n"), "escaped newline hidden");
+
+let wideTableState = copyState(state);
+wideTableState.cols = 140;
+wideTableState.events = [
+  {
+    kind: "message",
+    payload: {
+      role: "assistant",
+      content: "| A | B | C | D | E | F | G | H |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| alpha | beta | gamma | delta | epsilon | zeta | eta | theta | overflow | still overflow |\n| ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐ | 中等 | 优秀 | 极致 | 非常非常非常长的内容 | 难 | 更多 | 公司 |",
+    },
+  },
+];
+wideTableState.transcriptCache = null;
+renderFrame(wideTableState);
+let maxWideRow = 0;
+for (let row of wideTableState.transcriptCache.rows) {
+  let cleanWidth = visibleWidth(stripAnsi(row));
+  if (cleanWidth > maxWideRow) {
+    maxWideRow = cleanWidth;
+  }
+}
+assert(maxWideRow <= 92, "transcript content width capped");
+
+let duplicateState = copyState(state);
+duplicateState.events = [
+  {
+    kind: "message",
+    payload: {
+      role: "assistant",
+      content: "重复回答",
+    },
+  },
+  {
+    kind: "answer",
+    payload: {
+      content: "重复回答",
+    },
+  },
+];
+duplicateState.transcriptCache = null;
+renderFrame(duplicateState);
+let duplicateRows = duplicateState.transcriptCache.rows.join("\n");
+assert(duplicateRows.indexOf("重复回答") === duplicateRows.lastIndexOf("重复回答"), "duplicate answer hidden");
+
+let longTranscriptState = copyState(state);
 longTranscriptState.events = [];
 longTranscriptState.detailScroll = 0;
 longTranscriptState.transcriptCache = null;
@@ -132,8 +254,13 @@ let cachedRows = longTranscriptState.transcriptCache.rows;
 longTranscriptState.detailScroll = 20;
 renderFrame(longTranscriptState);
 assert(longTranscriptState.transcriptCache.rows === cachedRows, "scroll render reuses transcript cache");
+assert(longTranscriptState.detailScroll === 20, "renderer does not force scroll");
+longTranscriptState.detailScroll = 2147483647;
+let bottomFrame = renderFrame(longTranscriptState);
+assert(bottomFrame.includes("回答 79"), "large scroll clamps to transcript bottom");
+assert(longTranscriptState.detailScroll < 2147483647, "renderer stores clamped transcript scroll");
 
-let longState = state;
+let longState = copyState(state);
 longState.taskText = "你能干什么".repeat(30);
 longState.cursorCol = 20;
 longState.focus = "task";
@@ -147,6 +274,8 @@ for (let row of frameLines) {
 }
 assert(inputLines.length === 1, "one composer input line");
 assert(!inputLines[0].includes("Transcript"), "composer isolated from transcript");
+assert(!inputLines[0].includes("Enter"), "composer input contains only prompt text");
+assert(!inputLines[0].includes("Ctrl+C to quit"), "composer input excludes bottom hint");
 
 let sideEffectState = {
   app: state.app,
@@ -169,7 +298,7 @@ let sideEffectState = {
 renderFrame(sideEffectState);
 assert(sideEffectState.taskScroll === 99, "renderer does not mutate task scroll");
 assert(sideEffectState.eventScroll === 99, "renderer does not mutate event scroll");
-assert(sideEffectState.detailScroll === 99, "renderer does not mutate detail scroll");
+assert(sideEffectState.detailScroll <= 99, "renderer clamps detail scroll");
 
 let writes = [];
 let fakeSession = {
@@ -185,5 +314,39 @@ assert(writes[0].includes("\x1b[2J"), "first full clear");
 assert(!writes[1].includes("\x1b[2J"), "second no full clear");
 assert(writes[1].includes("\x1b[2;1H"), "changed row move");
 assert(!writes[1].includes("\x1b[1;1H"), "unchanged row skipped");
+
+let tempDir = path.join(process.cwd(), ".agent", "tui-smoke-new-session");
+fs.mkdirSync(tempDir, { recursive: true });
+let tempSession = path.join(tempDir, "session.jsonl");
+let tempAnswer = path.join(tempDir, "answer.md");
+fs.writeTextSync(tempSession, "{\"kind\":\"message\"}\n");
+fs.writeTextSync(tempAnswer, "old answer\n");
+let newSessionLogs = [];
+let newSessionState = {
+  app: {
+    sessionFile: tempSession,
+    answerFile: tempAnswer,
+  },
+  events: [{ kind: "message", payload: { role: "assistant", content: "old" } }],
+  messages: [{ role: "assistant", content: "old" }],
+  selectedEvent: 0,
+  eventScroll: 3,
+  detailScroll: 4,
+  answer: "old answer",
+  error: "",
+  transcriptCache: { width: 1, events: 1, rows: ["old"] },
+  transcriptMeasureCache: { width: 1, events: 1, lines: 1 },
+  logger: {
+    info: function(message, fields) {
+      newSessionLogs.push(message);
+    },
+  },
+};
+startNewSession(newSessionState);
+assert(newSessionState.events.length === 0, "new session clears events");
+assert(newSessionState.messages.length === 0, "new session clears messages");
+assert(newSessionState.answer === "", "new session clears answer");
+assert(!fs.existsSync(tempSession), "new session removes session file");
+assert(!fs.existsSync(tempAnswer), "new session removes answer file");
 
 println("tui smoke ok");

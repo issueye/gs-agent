@@ -1,4 +1,4 @@
-import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, repeatText, styleText, visibleWidth } from "@/tui/ansi";
+import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, repeatText, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
 import { loadingFrame } from "@/tui/loading";
 import { border, clampScroll, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
 
@@ -224,7 +224,7 @@ export function Box(options) {
   if (title !== "") {
     titleText = " " + title + " ";
   }
-  let top = "+" + titleText + repeatText("-", topFill - visibleWidth(titleText)) + "+";
+  let top = "┌" + titleText + repeatText("─", topFill - visibleWidth(titleText)) + "┐";
   if (focused) {
     top = styleText(top, { bold: true, fg: borderColor });
   } else {
@@ -235,9 +235,9 @@ export function Box(options) {
   for (let i = 0; i < bodyHeight; i = i + 1) {
     let row = takeLine(body, i);
     let leftPad = repeatText(" ", padding);
-    out.push(color("|", borderColor) + leftPad + line(row, innerWidth) + leftPad + color("|", borderColor));
+    out.push(color("│", borderColor) + leftPad + line(row, innerWidth) + leftPad + color("│", borderColor));
   }
-  out.push(line(color("+" + repeatText("-", width - 2) + "+", borderColor), width));
+  out.push(line(color("└" + repeatText("─", width - 2) + "┘", borderColor), width));
   return out;
 }
 
@@ -404,14 +404,14 @@ function pushCode(out, block, width) {
   if (fill < 0) {
     fill = 0;
   }
-  out.push(styleText(title + repeatText("-", fill), { dim: true, fg: "border" }));
+  out.push(styleText(title + repeatText("─", fill), { dim: true, fg: "border" }));
   for (let raw of splitLines(block.text || "")) {
     let rows = wrapText("  " + raw, width);
     for (let row of rows) {
       out.push(styleText(row, { fg: "muted" }));
     }
   }
-  out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+  out.push(styleText(repeatText("─", width), { dim: true, fg: "border" }));
 }
 
 function renderMarkdownBlocks(blocks, width) {
@@ -462,7 +462,7 @@ function renderMarkdownBlocks(blocks, width) {
     }
 
     if (block.type === "hr") {
-      out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+      out.push(styleText(repeatText("─", width), { dim: true, fg: "border" }));
       continue;
     }
   }
@@ -501,12 +501,25 @@ function tableCells(row) {
   return out;
 }
 
-function tableLine(cells, widths, width) {
-  let row = "|";
+function tableBorder(widths, width, left, join, right) {
+  let row = left;
   for (let i = 0; i < widths.length; i = i + 1) {
-    row = row + " " + line(takeLine(cells, i), widths[i]) + " |";
+    row = row + repeatText("─", widths[i] + 2);
+    if (i < widths.length - 1) {
+      row = row + join;
+    } else {
+      row = row + right;
+    }
   }
   return line(row, width);
+}
+
+function tableLine(cells, widths, width) {
+  let row = "│";
+  for (let i = 0; i < widths.length; i = i + 1) {
+    row = row + " " + line(truncateToWidth(takeLine(cells, i), widths[i]), widths[i]) + " │";
+  }
+  return line(truncateToWidth(row, width), width);
 }
 
 function tableRenderWidth(width) {
@@ -552,7 +565,11 @@ function renderTables(markdown, width) {
         if (rows[i].trim() === "") {
           break;
         }
-        table.push(tableCells(rows[i]));
+        let rowCells = tableCells(rows[i]);
+        if (rowCells.length > table[0].length) {
+          rowCells = rowCells.slice(0, table[0].length);
+        }
+        table.push(rowCells);
         i = i + 1;
       }
       let renderWidth = tableRenderWidth(width);
@@ -565,13 +582,13 @@ function renderTables(markdown, width) {
       for (let c = 0; c < columns; c = c + 1) {
         widths.push(colWidth);
       }
-      out.push(tablePad(styleText(repeatText("-", renderWidth), { dim: true, fg: "border" }), renderWidth, width));
+      out.push(tablePad(styleText(tableBorder(widths, renderWidth, "┌", "┬", "┐"), { dim: true, fg: "border" }), renderWidth, width));
       out.push(tablePad(styleText(tableLine(table[0], widths, renderWidth), { bold: true, fg: "accent" }), renderWidth, width));
-      out.push(tablePad(styleText(repeatText("-", renderWidth), { dim: true, fg: "border" }), renderWidth, width));
+      out.push(tablePad(styleText(tableBorder(widths, renderWidth, "├", "┼", "┤"), { dim: true, fg: "border" }), renderWidth, width));
       for (let r = 1; r < table.length; r = r + 1) {
         out.push(tablePad(tableLine(table[r], widths, renderWidth), renderWidth, width));
       }
-      out.push(tablePad(styleText(repeatText("-", renderWidth), { dim: true, fg: "border" }), renderWidth, width));
+      out.push(tablePad(styleText(tableBorder(widths, renderWidth, "└", "┴", "┘"), { dim: true, fg: "border" }), renderWidth, width));
       changed = true;
       continue;
     }

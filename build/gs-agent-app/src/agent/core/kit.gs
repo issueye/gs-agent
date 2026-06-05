@@ -2,7 +2,9 @@ import { createAgent } from "@/agent/core/agent";
 import { createRegistry } from "@/agent/tools/registry";
 import { createCodingTools } from "@/agent/tools/coding";
 import { createDynamicTools } from "@/agent/tools/dynamic";
+import { createLeveledContextSelector } from "@/agent/core/context";
 import { createJSONLSession } from "@/agent/session/jsonl";
+import { createSearchSessionArchiveTool } from "@/agent/tools/session-archive";
 
 // kit 是应用装配层：把 registry、内置工具、session 和 agent loop 组合成可运行对象。
 export function createCodingAgent(options) {
@@ -28,7 +30,30 @@ export function createCodingAgent(options) {
   let session = options.session;
   // 默认使用 JSONL 记录事件，便于人工审计和后续回放。
   if (!session && options.sessionFile) {
-    session = createJSONLSession(options.sessionFile);
+    session = createJSONLSession(options.sessionFile, {
+      archiveFile: options.sessionArchiveFile,
+    });
+  }
+
+  let archiveFile = options.sessionArchiveFile;
+  if (!archiveFile && session) {
+    archiveFile = session.archiveFile;
+  }
+  if (archiveFile && options.includeSessionArchiveTool !== false) {
+    registry.register(createSearchSessionArchiveTool(archiveFile));
+  }
+
+  let contextSelector = options.contextSelector;
+  if (!contextSelector && options.contextPolicy) {
+    contextSelector = createLeveledContextSelector(options.contextPolicy);
+  } else if (!contextSelector && options.leveledContext !== false) {
+    contextSelector = createLeveledContextSelector({
+      levels: ["primary", "working"],
+      working: "recent",
+      recentTurns: 4,
+      tokenThreshold: options.contextTokenThreshold,
+      summary: true,
+    });
   }
 
   let agent = createAgent({
@@ -36,6 +61,7 @@ export function createCodingAgent(options) {
     registry: registry,
     session: session,
     maxTurns: options.maxTurns,
+    contextSelector: contextSelector,
     onEvent: options.onEvent,
   });
 

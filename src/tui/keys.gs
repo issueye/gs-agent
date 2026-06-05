@@ -76,6 +76,20 @@ export function parseKeys(data) {
     if (rest.startsWith("\x1b[A")) {
       keys.push(key("up", ""));
       i = i + 3;
+    } else if (rest.startsWith("\x1b[H") || rest.startsWith("\x1bOH") || rest.startsWith("\x1b[1~") || rest.startsWith("\x1b[7~")) {
+      keys.push(key("home", ""));
+      if (rest.startsWith("\x1b[1~") || rest.startsWith("\x1b[7~")) {
+        i = i + 4;
+      } else {
+        i = i + 3;
+      }
+    } else if (rest.startsWith("\x1b[F") || rest.startsWith("\x1bOF") || rest.startsWith("\x1b[4~") || rest.startsWith("\x1b[8~")) {
+      keys.push(key("end", ""));
+      if (rest.startsWith("\x1b[4~") || rest.startsWith("\x1b[8~")) {
+        i = i + 4;
+      } else {
+        i = i + 3;
+      }
     } else if (rest.startsWith("\x1b[B")) {
       keys.push(key("down", ""));
       i = i + 3;

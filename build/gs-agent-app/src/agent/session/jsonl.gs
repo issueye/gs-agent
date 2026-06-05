@@ -2,6 +2,9 @@ let fs = require("@std/fs");
 let path = require("@std/path");
 let crypto = require("@std/crypto");
 
+import { createSessionArchive, defaultArchiveFile } from "@/agent/session/archive";
+import { messagesFromSessionEvents, sessionRecordLevel } from "@/agent/session/messages";
+
 // session 文件不存在时视为空内容，方便首次运行直接 append。
 function readText(file) {
   if (!fs.existsSync(file)) {
@@ -18,16 +21,32 @@ function appendLine(file, line) {
 }
 
 // JSONL session 每行一条事件，适合边运行边观察，也便于后续工具解析。
-export function createJSONLSession(file) {
+export function createJSONLSession(file, options) {
+  if (!options) {
+    options = {};
+  }
+
   let id = crypto.randomUUID();
+  let archiveFile = options.archiveFile;
+  if (archiveFile === undefined) {
+    archiveFile = defaultArchiveFile(file);
+  }
+  let archive = undefined;
+  if (archiveFile) {
+    archive = createSessionArchive(archiveFile);
+  }
 
   function append(kind, payload) {
     let record = {
       sessionId: id,
+      level: sessionRecordLevel(kind, payload),
       kind: kind,
       payload: payload,
     };
     appendLine(file, JSON.stringify(record));
+    if (archive) {
+      archive.append(record);
+    }
     return record;
   }
 
@@ -38,16 +57,27 @@ export function createJSONLSession(file) {
     for (let line of lines) {
       let trimmed = line.trim();
       if (trimmed !== "") {
-        records.push(JSON.parse(trimmed));
+        let record = JSON.parse(trimmed);
+        if (!record.level) {
+          record.level = sessionRecordLevel(record.kind, record.payload);
+        }
+        records.push(record);
       }
     }
     return records;
   }
 
+  function readMessages(options) {
+    return messagesFromSessionEvents(readAll(), options);
+  }
+
   return {
     id: id,
     file: file,
+    archiveFile: archiveFile,
+    archive: archive,
     append: append,
     readAll: readAll,
+    readMessages: readMessages,
   };
 }

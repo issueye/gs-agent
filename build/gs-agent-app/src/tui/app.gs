@@ -1,5 +1,6 @@
 import { loadAgentApp, readTaskText, runAgentTurn, writeTaskText } from "@/agent/app";
 import { createRunLogger, eventLogFields } from "@/agent/log";
+import { createJSONLSession } from "@/agent/session/jsonl";
 import { charWidth, chars } from "@/tui/ansi";
 import { renderFrame } from "@/tui/renderer";
 import { runTuiApp } from "@/tui/runtime";
@@ -74,11 +75,16 @@ function invalidateTranscript(state) {
   state.transcriptMeasureCache = null;
 }
 
+function scrollTranscriptToBottom(state) {
+  // 先给一个足够大的值，下一次 sync/render 会按真实内容高度夹到最底部。
+  state.detailScroll = 2147483647;
+}
+
 function addEvent(state, event) {
   state.events.push(event);
   state.selectedEvent = state.events.length - 1;
-  state.detailScroll = 0;
   invalidateTranscript(state);
+  scrollTranscriptToBottom(state);
 }
 
 function sanitizeError(err) {
@@ -115,6 +121,19 @@ function appendAnswerEvent(state) {
   if (!state.answer) {
     return;
   }
+  let last = undefined;
+  if (state.events.length > 0) {
+    last = state.events[state.events.length - 1];
+  }
+  if (last) {
+    if (last.kind === "message") {
+      if (last.payload) {
+        if (last.payload.role === "assistant" && String(last.payload.content) === String(state.answer)) {
+          return;
+        }
+      }
+    }
+  }
   addEvent(state, {
     kind: "answer",
     payload: {
@@ -124,65 +143,14 @@ function appendAnswerEvent(state) {
   });
 }
 
-function messageFromEvent(event) {
-  if (!event) {
-    return undefined;
-  }
-  let payload = event.payload;
-  if (!payload) {
-    return undefined;
-  }
-  if (event.kind === "message") {
-    if (payload.role === "user" || payload.role === "assistant") {
-      return {
-        role: payload.role,
-        content: payload.content,
-      };
-    }
-  }
-  if (event.kind === "tool_call") {
-    return {
-      kind: "tool_call",
-      id: payload.id,
-      name: payload.name,
-      args: payload.args,
-    };
-  }
-  if (event.kind === "tool_result") {
-    return {
-      role: "tool",
-      id: payload.id,
-      name: payload.name,
-      content: payload.content,
-    };
-  }
-  return undefined;
-}
-
-function restoreMessages(events) {
-  let messages = [];
-  for (let event of events) {
-    let message = messageFromEvent(event);
-    if (message) {
-      messages.push(message);
-    }
-  }
-  return messages;
-}
-
 function loadRecentSession(state) {
   state.events = [];
   invalidateTranscript(state);
+  let session = createJSONLSession(state.app.sessionFile);
   if (fs.existsSync(state.app.sessionFile)) {
-    let lines = fs.readFileSync(state.app.sessionFile).split("\n");
-    for (let line of lines) {
-      let trimmed = line.trim();
-      if (trimmed !== "") {
-        state.events.push(JSON.parse(trimmed));
-      }
-    }
+    state.events = session.readAll();
   }
-  state.messages = restoreMessages(state.events);
+  state.messages = session.readMessages({ levels: ["primary", "working"] });
   invalidateTranscript(state);
   state.answer = readAnswer(state);
   appendAnswerEvent(state);
@@ -199,6 +167,38 @@ function loadRecentSession(state) {
     events: state.events.length,
     messages: state.messages.length,
     hasAnswer: !!state.answer,
+  });
+}
+
+function resetConversationState(state) {
+  state.events = [];
+  state.messages = [];
+  state.selectedEvent = -1;
+  state.eventScroll = 0;
+  state.detailScroll = 0;
+  state.answer = "";
+  invalidateTranscript(state);
+}
+
+function removeFileIfExists(file) {
+  if (!file) {
+    return;
+  }
+  if (fs.existsSync(file)) {
+    fs.unlinkSync(file);
+  }
+}
+
+export function startNewSession(state) {
+  resetConversationState(state);
+  removeFileIfExists(state.app.sessionFile);
+  removeFileIfExists(state.app.sessionArchiveFile);
+  removeFileIfExists(state.app.answerFile);
+  state.error = "new session";
+  state.logger.info("new session started", {
+    sessionFile: state.app.sessionFile,
+    sessionArchiveFile: state.app.sessionArchiveFile,
+    answerFile: state.app.answerFile,
   });
 }
 
@@ -223,6 +223,7 @@ function sendMessage(state, ctx) {
 
   let input = state.taskText.trim();
   saveTask(state);
+  clearInput(state);
   state.running = true;
   state.error = "";
   state.detailScroll = 0;
@@ -247,8 +248,6 @@ function sendMessage(state, ctx) {
     });
     state.answer = result.answer;
     state.messages = result.messages;
-    appendAnswerEvent(state);
-    clearInput(state);
     state.error = "done";
     state.logger.info("message send completed", {
       events: result.events,
@@ -337,7 +336,11 @@ function backspace(state) {
 
 function moveCursor(state, keyId) {
   let lines = currentTaskLines(state);
-  if (keyId === "up") {
+  if (keyId === "home") {
+    state.cursorCol = 0;
+  } else if (keyId === "end") {
+    state.cursorCol = charLength(lines[state.cursorLine]);
+  } else if (keyId === "up") {
     state.cursorLine = clamp(state.cursorLine - 1, 0, lines.length - 1);
   } else if (keyId === "down") {
     state.cursorLine = clamp(state.cursorLine + 1, 0, lines.length - 1);
@@ -472,6 +475,22 @@ function estimateTranscriptLines(state, width) {
   return total;
 }
 
+function transcriptMeasureWidth(width) {
+  let max = 88;
+  let gutter = 8;
+  let available = width - gutter;
+  if (available < 32) {
+    available = width - 1;
+  }
+  if (available < 20) {
+    available = 20;
+  }
+  if (available > max) {
+    return max;
+  }
+  return available;
+}
+
 function detailBodyHeight(state) {
   if (state.layout) {
     if (state.layout.details) {
@@ -486,7 +505,7 @@ function detailBodyHeight(state) {
   if (state.cols < 76) {
     bannerHeight = 1;
   }
-  let composerHeight = 3;
+  let composerHeight = 5;
   let available = state.rows - bannerHeight - composerHeight - 6;
   if (available < 7) {
     available = 7;
@@ -574,7 +593,7 @@ function syncDetailViewport(state) {
   if (bodyHeight < 1) {
     bodyHeight = 1;
   }
-  let total = estimateTranscriptLines(state, state.cols - 1);
+  let total = estimateTranscriptLines(state, transcriptMeasureWidth(state.cols));
   let maxScroll = total - bodyHeight;
   if (maxScroll < 0) {
     maxScroll = 0;
@@ -593,7 +612,7 @@ function moveDetails(state, delta) {
   if (bodyHeight < 1) {
     bodyHeight = 1;
   }
-  let total = estimateTranscriptLines(state, state.cols - 1);
+  let total = estimateTranscriptLines(state, transcriptMeasureWidth(state.cols));
   let maxScroll = total - bodyHeight;
   if (maxScroll < 0) {
     maxScroll = 0;
@@ -697,10 +716,10 @@ function handleKey(state, item, ctx) {
     return;
   }
 
-  if (item.id === "ctrl+c" || item.id === "ctrl+q" || item.id === "escape") {
+  if (item.id === "ctrl+c") {
     if (state.dirty && !state.confirmExit) {
       state.confirmExit = true;
-      state.error = "unsaved task, press Esc again to quit";
+      state.error = "unsaved task, press Ctrl+C again to quit";
       state.logger.warn("exit confirmation requested", {
         dirty: state.dirty,
       });
@@ -732,22 +751,6 @@ function handleKey(state, item, ctx) {
     });
     return;
   }
-  if (item.id === "q" && state.focus !== "task") {
-    if (state.dirty && !state.confirmExit) {
-      state.confirmExit = true;
-      state.error = "unsaved task, press q again to quit";
-      state.logger.warn("exit confirmation requested", {
-        dirty: state.dirty,
-      });
-      return;
-    }
-    state.logger.info("exit requested", {
-      key: item.id,
-    });
-    state.shouldExit = true;
-    return;
-  }
-
   if (state.focus === "task") {
     if (item.id === "text") {
       state.confirmExit = false;
@@ -757,11 +760,11 @@ function handleKey(state, item, ctx) {
       insertText(state, item.text);
     } else if (item.id === "enter") {
       state.confirmExit = false;
-      insertNewline(state);
+      sendMessage(state, ctx);
     } else if (item.id === "backspace") {
       state.confirmExit = false;
       backspace(state);
-    } else if (item.id === "up" || item.id === "down" || item.id === "left" || item.id === "right") {
+    } else if (item.id === "up" || item.id === "down" || item.id === "left" || item.id === "right" || item.id === "home" || item.id === "end") {
       moveCursor(state, item.id);
     }
     return;
@@ -798,6 +801,8 @@ export function runAgentTui() {
   let state = runTuiApp({
     name: "gs-agent tui",
     title: "gs-agent tui",
+    alternateScreen: false,
+    mouse: false,
     tickMs: 120,
     createState: function(size) {
       return createStateWithSize(app, size);
@@ -816,7 +821,7 @@ export function runAgentTui() {
         logFile: app.logFile,
         latestLogFile: app.latestLogFile,
       });
-      loadRecentSession(state);
+      startNewSession(state);
       syncViewState(state);
     },
     onKey: function(state, item, ctx) {

@@ -11,5 +11,6 @@ apiKey = "sk-..."
 baseUrl = "https://api.deepseek.com/anthropic"
 model = "deepseek-v4-flash"
 maxTokens = 1024
+contextTokenThreshold = 258000
 timeoutMs = 60000
 thinking = "disabled"

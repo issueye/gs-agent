@@ -34,8 +34,12 @@ export function runTuiApp(options) {
   let tickMs = options.tickMs || 120;
   let mouse = true;
   let mouseMode = "wheel";
+  let alternateScreen = true;
   if ("mouse" in options) {
     mouse = !!options.mouse;
+  }
+  if ("alternateScreen" in options) {
+    alternateScreen = !!options.alternateScreen;
   }
   if ("mouseMode" in options) {
     mouseMode = options.mouseMode;
@@ -101,7 +105,10 @@ export function runTuiApp(options) {
       if (mouseMode !== "off") {
         leave = leave + disableMouse();
       }
-      session.write(leave + leaveAlternateScreen());
+      if (alternateScreen) {
+        leave = leave + leaveAlternateScreen();
+      }
+      session.write(leave);
       if ("drainInput" in session) {
         session.drainInput(80, 10);
       }
@@ -165,7 +172,10 @@ export function runTuiApp(options) {
 
   ctx.session = session;
   session.setTitle(title);
-  let enter = enterAlternateScreen() + hideCursor();
+  let enter = hideCursor();
+  if (alternateScreen) {
+    enter = enterAlternateScreen() + enter;
+  }
   if (mouseMode === "full") {
     enter = enter + enableMouse();
   } else if (mouseMode === "wheel") {
