@@ -71,6 +71,24 @@ E:\codes\gts\dist\gs.exe --timeout 0 run --tui
 .\dist\gs-agent.exe --tui
 ```
 
+打包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
+```
+
+跳过 smoke test：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -SkipSmoke
+```
+
+指定解释器或输出路径：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -GsExe E:\codes\gts\dist\gs.exe -Output dist\gs-agent.exe
+```
+
 TUI 快捷键：
 
 - `Ctrl+R`：保存当前任务并运行 agent。
