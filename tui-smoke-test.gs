@@ -97,6 +97,20 @@ assert(frame.includes("Input workspace/task.txt"), "composer");
 assert(frame.includes("读取 README.md 并总结"), "zh render");
 assert(frame.includes("answer=ready"), "answer status");
 assert(frame.includes("最终答案"), "answer render");
+let markdownState = state;
+markdownState.events = [
+  {
+    kind: "answer",
+    payload: {
+      content: "# 标题\n\n```python\ndef hello():\n  print(1)\n```",
+    },
+  },
+];
+markdownState.selectedEvent = 0;
+markdownState.focus = "details";
+let markdownFrame = renderFrame(markdownState);
+assert(markdownFrame.includes("\x1b["), "details markdown styled");
+assert(markdownFrame.includes("python"), "details markdown code language");
 
 let longState = state;
 longState.taskText = "你能干什么".repeat(30);

@@ -2,6 +2,8 @@ import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, repeatText, s
 import { loadingFrame } from "@/tui/loading";
 import { border, clampScroll, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
 
+let stdMarkdown = require("@std/markdown");
+
 function optionText(options, name, fallback) {
   if (options && name in options) {
     return options[name];
@@ -314,6 +316,240 @@ function renderInlineMarkdown(row) {
   return out;
 }
 
+function nodeText(node) {
+  if (!node) {
+    return "";
+  }
+  if (node.text) {
+    return String(node.text);
+  }
+  let out = "";
+  if (node.children) {
+    for (let child of node.children) {
+      if (child.type === "link") {
+        let label = nodeText(child);
+        let url = child.url || "";
+        out = out + label;
+        if (url !== "") {
+          out = out + " <" + url + ">";
+        }
+      } else {
+        out = out + nodeText(child);
+      }
+    }
+  }
+  return out;
+}
+
+function styledInline(node) {
+  if (!node) {
+    return "";
+  }
+  if (node.type === "text") {
+    return node.text || "";
+  }
+  if (node.type === "code") {
+    return styleText(" " + (node.text || "") + " ", { inverse: true });
+  }
+  if (node.type === "strong") {
+    return styleText(nodeText(node), { bold: true, fg: "text" });
+  }
+  if (node.type === "em") {
+    return styleText(nodeText(node), { dim: true, fg: "text" });
+  }
+  if (node.type === "link") {
+    let label = nodeText(node);
+    let url = node.url || "";
+    if (url !== "") {
+      return styleText(label, { underline: true, fg: "info" }) + styleText(" <" + url + ">", { dim: true, fg: "muted" });
+    }
+    return styleText(label, { underline: true, fg: "info" });
+  }
+  if (node.type === "softbreak" || node.type === "hardbreak") {
+    return "\n";
+  }
+  if (node.children) {
+    let out = "";
+    for (let child of node.children) {
+      out = out + styledInline(child);
+    }
+    return out;
+  }
+  return nodeText(node);
+}
+
+function styledInlineList(children) {
+  let out = "";
+  for (let child of children) {
+    out = out + styledInline(child);
+  }
+  return out;
+}
+
+function pushWrapped(out, text, width, style) {
+  let rows = wrapText(text, width);
+  for (let row of rows) {
+    if (style) {
+      out.push(styleText(row, style));
+    } else {
+      out.push(row);
+    }
+  }
+}
+
+function pushCode(out, block, width) {
+  let lang = block.lang || "code";
+  let title = " " + lang + " ";
+  let fill = width - visibleWidth(title);
+  if (fill < 0) {
+    fill = 0;
+  }
+  out.push(styleText(title + repeatText("-", fill), { dim: true, fg: "border" }));
+  for (let raw of splitLines(block.text || "")) {
+    let rows = wrapText("  " + raw, width);
+    for (let row of rows) {
+      out.push(styleText(row, { fg: "muted" }));
+    }
+  }
+  out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+}
+
+function renderMarkdownBlocks(blocks, width) {
+  let out = [];
+  for (let block of blocks) {
+    if (block.type === "heading") {
+      if (out.length > 0) {
+        out.push("");
+      }
+      let prefix = repeatText("#", block.level || 1) + " ";
+      pushWrapped(out, prefix + styledInlineList(block.children || []), width, { bold: true, fg: "accent" });
+      continue;
+    }
+
+    if (block.type === "paragraph") {
+      pushWrapped(out, styledInlineList(block.children || []), width, undefined);
+      out.push("");
+      continue;
+    }
+
+    if (block.type === "list") {
+      for (let item of block.children || []) {
+        let rows = wrapText(styledInlineList(item.children || []), width - 2);
+        for (let i = 0; i < rows.length; i = i + 1) {
+          if (i === 0) {
+            out.push(styleText("- ", { fg: "accent" }) + rows[i]);
+          } else {
+            out.push("  " + rows[i]);
+          }
+        }
+      }
+      out.push("");
+      continue;
+    }
+
+    if (block.type === "code") {
+      pushCode(out, block, width);
+      out.push("");
+      continue;
+    }
+
+    if (block.type === "blockquote") {
+      let childRows = renderMarkdownBlocks(block.children || [], width - 2);
+      for (let row of childRows) {
+        out.push(styleText("> ", { fg: "muted" }) + styleText(row, { fg: "muted" }));
+      }
+      continue;
+    }
+
+    if (block.type === "hr") {
+      out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+      continue;
+    }
+  }
+
+  while (out.length > 0 && out[out.length - 1] === "") {
+    out.pop();
+  }
+  if (out.length === 0) {
+    out.push("");
+  }
+  return out;
+}
+
+function isTableSeparator(row) {
+  let text = String(row || "").trim();
+  if (!text.includes("|")) {
+    return false;
+  }
+  let clean = text.replaceAll("|", "").replaceAll(":", "").replaceAll("-", "").trim();
+  return clean === "";
+}
+
+function tableCells(row) {
+  let text = String(row || "").trim();
+  if (text.startsWith("|")) {
+    text = text.slice(1);
+  }
+  if (text.endsWith("|")) {
+    text = text.slice(0, text.length - 1);
+  }
+  let cells = text.split("|");
+  let out = [];
+  for (let cell of cells) {
+    out.push(cell.trim());
+  }
+  return out;
+}
+
+function tableLine(cells, widths, width) {
+  let row = "|";
+  for (let i = 0; i < widths.length; i = i + 1) {
+    row = row + " " + line(takeLine(cells, i), widths[i]) + " |";
+  }
+  return line(row, width);
+}
+
+function renderTables(markdown, width) {
+  let rows = splitLines(markdown);
+  let out = [];
+  let changed = false;
+  let i = 0;
+  while (i < rows.length) {
+    if (i + 1 < rows.length && rows[i].includes("|") && isTableSeparator(rows[i + 1])) {
+      let table = [tableCells(rows[i])];
+      i = i + 2;
+      while (i < rows.length && rows[i].includes("|") && rows[i].trim() !== "") {
+        table.push(tableCells(rows[i]));
+        i = i + 1;
+      }
+      let columns = table[0].length;
+      let colWidth = Math.floor((width - columns * 3 - 1) / columns);
+      if (colWidth < 4) {
+        colWidth = 4;
+      }
+      let widths = [];
+      for (let c = 0; c < columns; c = c + 1) {
+        widths.push(colWidth);
+      }
+      out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+      out.push(styleText(tableLine(table[0], widths, width), { bold: true, fg: "accent" }));
+      out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+      for (let r = 1; r < table.length; r = r + 1) {
+        out.push(tableLine(table[r], widths, width));
+      }
+      out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+      changed = true;
+      continue;
+    }
+    out.push(rows[i]);
+    i = i + 1;
+  }
+  return {
+    changed: changed,
+    text: out.join("\n"),
+  };
+}
+
 export function Markdown(options) {
   let width = optionNumber(options, "width", 1);
   let height = optionNumber(options, "height", 0);
@@ -329,42 +565,12 @@ export function Markdown(options) {
     bodyHeight = 0;
   }
 
-  let rows = [];
-  let inCode = false;
-  for (let raw of splitLines(markdown)) {
-    let row = raw;
-    if (row.startsWith("```")) {
-      inCode = !inCode;
-      rows.push(styleText(border(width), { dim: true, fg: "border" }));
-      continue;
-    }
-    if (inCode) {
-      let codeRows = wrapText("  " + row, width);
-      for (let item of codeRows) {
-        rows.push(styleText(item, { dim: true, fg: "muted" }));
-      }
-      continue;
-    }
-    if (row.startsWith("# ")) {
-      rows.push(styleText(line(row.slice(2), width), { bold: true, fg: "accent" }));
-      continue;
-    }
-    if (row.startsWith("## ")) {
-      rows.push(styleText(line(row.slice(3), width), { bold: true, fg: "accent" }));
-      continue;
-    }
-    if (row.startsWith("- ")) {
-      let wrapped = wrapText("  - " + row.slice(2), width);
-      for (let item of wrapped) {
-        rows.push(renderInlineMarkdown(item));
-      }
-      continue;
-    }
-    let wrapped = wrapText(row, width);
-    for (let item of wrapped) {
-      rows.push(renderInlineMarkdown(item));
-    }
+  let tableRendered = renderTables(markdown, width);
+  if (tableRendered.changed) {
+    markdown = tableRendered.text;
   }
+  let doc = stdMarkdown.parse(markdown);
+  let rows = renderMarkdownBlocks(doc.children || [], width);
 
   let maxScroll = rows.length - bodyHeight;
   if (maxScroll < 0) {

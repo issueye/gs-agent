@@ -1,4 +1,6 @@
 // ANSI 小工具集中放在这里，避免界面代码里到处散落转义序列。
+let stdText = require("@std/text");
+
 export let ESC = "\x1b";
 export let RESET = "\x1b[0m";
 export let BOLD = "\x1b[1m";
@@ -157,48 +159,19 @@ export function repeatText(text, count) {
 
 // 第一版只去掉常见 CSI 序列，后续可扩展 OSC/APC。
 export function stripAnsi(text) {
-  return String(text).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+  return stdText.stripAnsi(text);
 }
 
 export function charWidth(ch) {
-  if (!ch) {
-    return 0;
-  }
-
-  let code = ch.codePointAt(0);
-  if (code === 0) {
-    return 0;
-  }
-
-  // CJK、全角标点和常见 emoji 在终端里通常占两列。
-  if (
-    (code >= 4352 && code <= 4447) ||
-    (code >= 11904 && code <= 42191) ||
-    (code >= 44032 && code <= 55203) ||
-    (code >= 63744 && code <= 64255) ||
-    (code >= 65040 && code <= 65049) ||
-    (code >= 65072 && code <= 65135) ||
-    (code >= 65280 && code <= 65376) ||
-    (code >= 65504 && code <= 65510) ||
-    (code >= 127744 && code <= 129791)
-  ) {
-    return 2;
-  }
-
-  return 1;
+  return stdText.width(ch);
 }
 
 export function chars(text) {
-  return Array.from(String(text));
+  return stdText.chars(text);
 }
 
 export function visibleWidth(text) {
-  let clean = chars(stripAnsi(text));
-  let width = 0;
-  for (let ch of clean) {
-    width = width + charWidth(ch);
-  }
-  return width;
+  return stdText.width(text);
 }
 
 export function truncateToWidth(text, width) {
@@ -217,8 +190,8 @@ export function truncateToWidth(text, width) {
       }
     }
 
-    let ch = chars(rest)[0];
-    let next = charWidth(ch);
+    let ch = stdText.chars(rest)[0];
+    let next = stdText.width(ch);
     if (used + next > width) {
       break;
     }

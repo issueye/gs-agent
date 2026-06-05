@@ -1,5 +1,6 @@
 import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, padRight, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
 import { compactLoading } from "@/tui/loading";
+import { Markdown } from "@/tui/components";
 import { banner, border, clampScroll, joinColumns, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
 
 function safeText(value) {
@@ -271,7 +272,10 @@ function drawDetails(state, width, height) {
   if (bodyHeight < 1) {
     bodyHeight = 1;
   }
-  let lines = wrapText(text, width - 1);
+  let lines = Markdown({
+    width: width - 1,
+    text: text,
+  });
   let maxScroll = lines.length - bodyHeight;
   if (maxScroll < 0) {
     maxScroll = 0;

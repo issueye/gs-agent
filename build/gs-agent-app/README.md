@@ -207,6 +207,7 @@ E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s dynamic-tool-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s markdown-stdlib-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s provider-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s tui-smoke-test.gs
 ```
