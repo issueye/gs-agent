@@ -138,6 +138,10 @@ export function enableMouse() {
   return "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 }
 
+export function enableMouseWheel() {
+  return "\x1b[?1000h\x1b[?1006h";
+}
+
 export function disableMouse() {
   return "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 }

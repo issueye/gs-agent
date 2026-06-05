@@ -509,21 +509,55 @@ function tableLine(cells, widths, width) {
   return line(row, width);
 }
 
+function tableRenderWidth(width) {
+  let maxWidth = Math.floor(width * 0.8);
+  if (maxWidth < 24) {
+    maxWidth = width;
+  }
+  if (maxWidth > width) {
+    maxWidth = width;
+  }
+  return maxWidth;
+}
+
+function tablePad(row, tableWidth, fullWidth) {
+  let indent = 2;
+  if (fullWidth - tableWidth < indent) {
+    indent = 0;
+  }
+  return line(repeatText(" ", indent) + line(row, tableWidth), fullWidth);
+}
+
 function renderTables(markdown, width) {
   let rows = splitLines(markdown);
   let out = [];
   let changed = false;
   let i = 0;
   while (i < rows.length) {
-    if (i + 1 < rows.length && rows[i].includes("|") && isTableSeparator(rows[i + 1])) {
+    let canStartTable = false;
+    if (i + 1 < rows.length) {
+      if (rows[i].includes("|")) {
+        if (isTableSeparator(rows[i + 1])) {
+          canStartTable = true;
+        }
+      }
+    }
+    if (canStartTable) {
       let table = [tableCells(rows[i])];
       i = i + 2;
-      while (i < rows.length && rows[i].includes("|") && rows[i].trim() !== "") {
+      while (i < rows.length) {
+        if (!rows[i].includes("|")) {
+          break;
+        }
+        if (rows[i].trim() === "") {
+          break;
+        }
         table.push(tableCells(rows[i]));
         i = i + 1;
       }
+      let renderWidth = tableRenderWidth(width);
       let columns = table[0].length;
-      let colWidth = Math.floor((width - columns * 3 - 1) / columns);
+      let colWidth = Math.floor((renderWidth - columns * 3 - 1) / columns);
       if (colWidth < 4) {
         colWidth = 4;
       }
@@ -531,13 +565,13 @@ function renderTables(markdown, width) {
       for (let c = 0; c < columns; c = c + 1) {
         widths.push(colWidth);
       }
-      out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
-      out.push(styleText(tableLine(table[0], widths, width), { bold: true, fg: "accent" }));
-      out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+      out.push(tablePad(styleText(repeatText("-", renderWidth), { dim: true, fg: "border" }), renderWidth, width));
+      out.push(tablePad(styleText(tableLine(table[0], widths, renderWidth), { bold: true, fg: "accent" }), renderWidth, width));
+      out.push(tablePad(styleText(repeatText("-", renderWidth), { dim: true, fg: "border" }), renderWidth, width));
       for (let r = 1; r < table.length; r = r + 1) {
-        out.push(tableLine(table[r], widths, width));
+        out.push(tablePad(tableLine(table[r], widths, renderWidth), renderWidth, width));
       }
-      out.push(styleText(repeatText("-", width), { dim: true, fg: "border" }));
+      out.push(tablePad(styleText(repeatText("-", renderWidth), { dim: true, fg: "border" }), renderWidth, width));
       changed = true;
       continue;
     }

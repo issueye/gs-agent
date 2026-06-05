@@ -1,4 +1,4 @@
-import { clearScreen, disableMouse, enableMouse, enterAlternateScreen, hideCursor, leaveAlternateScreen, showCursor } from "@/tui/ansi";
+import { clearScreen, disableMouse, enableMouse, enableMouseWheel, enterAlternateScreen, hideCursor, leaveAlternateScreen, showCursor } from "@/tui/ansi";
 import { parseKeys } from "@/tui/keys";
 import { createScreenRenderer } from "@/tui/screen";
 
@@ -33,8 +33,15 @@ export function runTuiApp(options) {
   let name = options.name || title;
   let tickMs = options.tickMs || 120;
   let mouse = true;
+  let mouseMode = "wheel";
   if ("mouse" in options) {
     mouse = !!options.mouse;
+  }
+  if ("mouseMode" in options) {
+    mouseMode = options.mouseMode;
+  }
+  if (!mouse) {
+    mouseMode = "off";
   }
   let shouldExit = options.shouldExit || defaultShouldExit;
   let size = terminalApi.size();
@@ -91,7 +98,7 @@ export function runTuiApp(options) {
     }
     if (session) {
       let leave = showCursor() + clearScreen();
-      if (mouse) {
+      if (mouseMode !== "off") {
         leave = leave + disableMouse();
       }
       session.write(leave + leaveAlternateScreen());
@@ -159,8 +166,10 @@ export function runTuiApp(options) {
   ctx.session = session;
   session.setTitle(title);
   let enter = enterAlternateScreen() + hideCursor();
-  if (mouse) {
+  if (mouseMode === "full") {
     enter = enter + enableMouse();
+  } else if (mouseMode === "wheel") {
+    enter = enter + enableMouseWheel();
   }
   session.write(enter);
   screen = createScreenRenderer(session);

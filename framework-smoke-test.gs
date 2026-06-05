@@ -96,6 +96,7 @@ let state = runTuiApp({
 assert(startedConfig.raw === true, "raw input enabled");
 assert(startedConfig.bracketedPaste === true, "paste enabled");
 assert(writes.join("\n").includes("\x1b[?1006h"), "mouse enabled");
+assert(!writes.join("\n").includes("\x1b[?1002h"), "drag mouse tracking disabled by default");
 assert(writes.join("\n").includes("\x1b[?1006l"), "mouse disabled");
 assert(state.started, "onStart");
 assert(state.stopped, "onStop");
@@ -168,6 +169,21 @@ let md = Markdown({
 assert(md.length === 5, "markdown height");
 assert(stripAnsi(md.join("\n")).includes("标题"), "markdown heading");
 assert(stripAnsi(md.join("\n")).includes("重点"), "markdown bold");
+
+let mdTable = Markdown({
+  width: 100,
+  text: "| 日期 | 天气 | 气温范围 |\n| --- | --- | --- |\n| 6月5日 | 多云 | 27C ~ 32C |\n| 6月6日 | 小雨 | 26C ~ 34C |",
+});
+let tableRule = "";
+for (let row of mdTable) {
+  let clean = stripAnsi(row);
+  if (clean.trim().startsWith("---")) {
+    tableRule = clean;
+    break;
+  }
+}
+assert(tableRule !== "", "markdown table rule rendered");
+assert(visibleWidth(tableRule.trim()) <= 80, "markdown table width capped");
 
 let loading = Loading({
   width: 16,

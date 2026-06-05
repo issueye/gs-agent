@@ -101,6 +101,8 @@ TUI 快捷键：
 - 鼠标滚轮：滚动当前指向的任务区、时间线或详情区。
 - `Esc` / `Ctrl+C` / `Ctrl+Q`：退出并恢复终端状态；任务未保存时需要再次确认。
 
+Git Bash/mintty 下默认只启用滚轮鼠标事件，不启用拖拽 mouse tracking，避免拦截终端原生文本选择。需要选择内容时可以直接拖拽；如果终端仍拦截选择，按住 `Shift` 再拖拽通常会强制使用终端选择模式。
+
 TUI 启动时会自动加载最近的 `.agent/session.jsonl` 和 `.agent/answer.md`。运行结束后最终答案会作为 `answer` 事件出现在时间线里。
 TUI 状态栏会显示 `log=.agent/logs/latest.log`，排查异常时优先查看这个文件；完整历史保留在 `.agent/logs/gs-agent.log`。
 
