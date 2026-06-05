@@ -1,5 +1,6 @@
 import { createCodingAgent } from "@/agent/core/kit";
 import { createProvider } from "@/agent/llm/providers";
+import { createRunLogger, eventLogFields, logPaths } from "@/agent/log";
 import { createWorkspaceTools } from "@/agent/tools/workspace";
 
 let fs = require("@std/fs");
@@ -113,6 +114,7 @@ export function loadAgentApp(root) {
   let workspace = path.join(root, "workspace");
   let sessionFile = path.join(root, ".agent", "session.jsonl");
   let answerFile = path.join(root, ".agent", "answer.md");
+  let logs = logPaths(root);
 
   return {
     root: root,
@@ -122,6 +124,8 @@ export function loadAgentApp(root) {
     taskFile: agent.taskFile,
     sessionFile: sessionFile,
     answerFile: answerFile,
+    logFile: logs.file,
+    latestLogFile: logs.latest,
   };
 }
 
@@ -131,12 +135,40 @@ export function runAgentTask(options) {
   if (!app) {
     app = loadAgentApp(options.root);
   }
+  let logger = options.logger;
+  if (!logger) {
+    logger = createRunLogger(app.root, "agent");
+  }
 
   let sessionFile = app.sessionFile;
   // 每次运行生成一份新的 session，避免旧事件干扰本次排查。
   if (fs.existsSync(sessionFile)) {
     fs.unlinkSync(sessionFile);
   }
+
+  let model = "unknown";
+  let baseUrl = "";
+  if (app.config.llm) {
+    if (app.config.llm.anthropic) {
+      if (app.config.llm.anthropic.model) {
+        model = app.config.llm.anthropic.model;
+      }
+      if (app.config.llm.anthropic.baseUrl) {
+        baseUrl = app.config.llm.anthropic.baseUrl;
+      }
+    }
+  }
+  logger.info("agent run started", {
+    root: app.root,
+    provider: app.agent.provider,
+    model: model,
+    baseUrl: baseUrl,
+    maxTurns: app.agent.maxTurns,
+    tools: app.agent.tools,
+    taskFile: app.taskFile,
+    sessionFile: sessionFile,
+    answerFile: app.answerFile,
+  });
 
   let kit = createCodingAgent({
     cwd: app.root,
@@ -146,21 +178,41 @@ export function runAgentTask(options) {
     tools: createWorkspaceTools(app.workspace),
     sessionFile: sessionFile,
     maxTurns: app.agent.maxTurns,
-    onEvent: options.onEvent,
+    onEvent: function(event) {
+      logger.info("agent event", eventLogFields(event));
+      if (options.onEvent) {
+        options.onEvent(event);
+      }
+    },
   });
 
   // agent.run 是同步闭环：模型 -> 工具 -> 模型，直到最终回答或达到 maxTurns。
-  let answer = kit.agent.run(taskPrompt(app.root, app.agent.taskFile, options.taskText));
-  let records = kit.session.readAll();
-  fs.mkdirSync(path.dirname(app.answerFile), { recursive: true });
-  fs.writeTextSync(app.answerFile, answer.content + "\n");
+  let answer = undefined;
+  try {
+    answer = kit.agent.run(taskPrompt(app.root, app.agent.taskFile, options.taskText));
+    let records = kit.session.readAll();
+    fs.mkdirSync(path.dirname(app.answerFile), { recursive: true });
+    fs.writeTextSync(app.answerFile, answer.content + "\n");
+    logger.info("agent run finished", {
+      events: records.length,
+      answerFile: app.answerFile,
+      sessionFile: sessionFile,
+    });
 
-  return {
-    answer: answer.content,
-    events: records.length,
-    sessionFile: sessionFile,
-    answerFile: app.answerFile,
-  };
+    return {
+      answer: answer.content,
+      events: records.length,
+      sessionFile: sessionFile,
+      answerFile: app.answerFile,
+      logFile: app.logFile,
+      latestLogFile: app.latestLogFile,
+    };
+  } catch (err) {
+    logger.error("agent run failed", {
+      error: String(err),
+    });
+    throw err;
+  }
 }
 
 // 保持现有命令行入口行为不变。

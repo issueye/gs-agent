@@ -8,6 +8,27 @@ function key(id, text) {
   };
 }
 
+function mouse(button, col, row, final) {
+  let id = "mouse";
+  let action = "down";
+  if (final === "m") {
+    action = "up";
+  }
+  if (button === 64) {
+    action = "wheelUp";
+  } else if (button === 65) {
+    action = "wheelDown";
+  }
+  return {
+    id: id,
+    text: "",
+    action: action,
+    button: button,
+    col: col,
+    row: row,
+  };
+}
+
 function pushPrintable(keys, text) {
   for (let ch of String(text)) {
     if (ch >= " " && ch !== "\x7f") {
@@ -31,6 +52,26 @@ export function parseKeys(data) {
   let i = 0;
   while (i < data.length) {
     let rest = data.slice(i);
+
+    if (rest.startsWith("\x1b[<")) {
+      let finalM = rest.indexOf("M");
+      let finalm = rest.indexOf("m");
+      let finalIndex = finalM;
+      let final = "M";
+      if (finalIndex < 0 || (finalm >= 0 && finalm < finalIndex)) {
+        finalIndex = finalm;
+        final = "m";
+      }
+      if (finalIndex >= 0) {
+        let body = rest.slice(3, finalIndex);
+        let parts = body.split(";");
+        if (parts.length === 3) {
+          keys.push(mouse(Number(parts[0]), Number(parts[1]), Number(parts[2]), final));
+          i = i + finalIndex + 1;
+          continue;
+        }
+      }
+    }
 
     if (rest.startsWith("\x1b[A")) {
       keys.push(key("up", ""));

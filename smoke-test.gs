@@ -1,5 +1,6 @@
 import { createCodingAgent } from "@/agent/core/kit";
 import { createScriptedProvider } from "@/agent/llm/fake";
+import { createLogger } from "@/agent/log";
 import { createWorkspaceTools } from "@/agent/tools/workspace";
 
 let fs = require("@std/fs");
@@ -15,8 +16,16 @@ function assert(condition, message) {
 function main() {
   let root = process.cwd();
   let sessionFile = path.join(root, ".agent", "smoke-session.jsonl");
+  let logFile = path.join(root, ".agent", "logs", "smoke.log");
+  let latestLogFile = path.join(root, ".agent", "logs", "smoke-latest.log");
   if (fs.existsSync(sessionFile)) {
     fs.unlinkSync(sessionFile);
+  }
+  if (fs.existsSync(logFile)) {
+    fs.unlinkSync(logFile);
+  }
+  if (fs.existsSync(latestLogFile)) {
+    fs.unlinkSync(latestLogFile);
   }
 
   let provider = createScriptedProvider([
@@ -89,6 +98,17 @@ function main() {
   let parsed = parsedKit.agent.run("Parse text tool calls.");
   assert(parsed.content === "TEXT_TOOL_OK", "text tool call should execute when tools are allowed");
   println("smoke:text-tool-parse=ok");
+
+  let logger = createLogger({
+    file: logFile,
+    latest: latestLogFile,
+    scope: "smoke",
+  });
+  logger.info("smoke log line", { ok: true });
+  assert(fs.existsSync(logFile), "log file should be created");
+  assert(fs.existsSync(latestLogFile), "latest log file should be created");
+  assert(fs.readFileSync(logFile).includes("smoke log line"), "log file should include message");
+  println("smoke:log=ok");
 }
 
 main();

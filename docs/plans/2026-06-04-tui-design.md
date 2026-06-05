@@ -21,18 +21,24 @@ TUI 是 `gs-agent` 的交互式运行界面，用于替代只读写 `workspace/t
 
 ## 启动方式
 
-新增一个独立入口，例如 `tui.gs`，后续可通过项目命令运行：
+正式入口使用 `--tui` 参数：
 
 ```powershell
-..\gs.exe --timeout 0 tui.gs
+..\gs.exe --timeout 0 run --tui
 ```
 
 分发二进制可以提供两个模式：
 
 - 无参数：保持当前 `main.gs` 行为，执行一次任务并退出。
-- `tui` 参数：进入交互式 TUI。
+- `--tui` 参数：进入交互式 TUI。
 
-如果 GoScript 当前分发入口不方便区分参数，可以先保留 `tui.gs` 作为开发入口，等运行时参数能力确认后再并入分发二进制。
+打包后的程序直接使用：
+
+```powershell
+.\dist\gs-agent.exe --tui
+```
+
+`tui.gs` 可以保留为开发调试入口，但不作为正式命令。
 
 ## 界面布局
 
@@ -186,6 +192,6 @@ TUI 内部维护一个轻量状态对象：
 
 第三阶段：分发体验。
 
-- 支持二进制 `tui` 参数进入 TUI。
+- 支持二进制 `--tui` 参数进入 TUI。
 - 更新 README 的运行和分发说明。
 - 增加 fake provider 下的 TUI smoke test。

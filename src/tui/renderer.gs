@@ -1,26 +1,12 @@
-import { BOLD, DIM, INVERSE, RESET, charWidth, chars, fg, line, padRight, repeatText, truncateToWidth, visibleWidth } from "@/tui/ansi";
+import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, padRight, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
 import { compactLoading } from "@/tui/loading";
+import { banner, border, clampScroll, joinColumns, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
 
 function safeText(value) {
   if (!value) {
     return "";
   }
   return String(value);
-}
-
-function splitLines(text) {
-  return safeText(text).replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
-}
-
-function takeLine(lines, index) {
-  if (index < 0 || index >= lines.length) {
-    return "";
-  }
-  return lines[index];
-}
-
-function border(width) {
-  return repeatText("-", width);
 }
 
 function bannerLines(width) {
@@ -32,15 +18,13 @@ function bannerLines(width) {
     " \\____|____/   /_/   \\_\\____|_____|_| \\_| |_|  ",
   ];
 
-  if (width >= 76) {
-    return wide.map(function(row) {
-      return BOLD + fg(36) + line(row, width) + RESET;
-    });
-  }
-
-  return [
-    BOLD + fg(36) + line("GS-AGENT", width) + RESET,
-  ];
+  return banner({
+    width: width,
+    title: "GS-AGENT",
+    wide: wide,
+    minWidth: 76,
+    color: 36,
+  });
 }
 
 function eventTitle(event) {
@@ -117,8 +101,12 @@ function configLabel(state) {
     toolCount = tools.length;
   }
   let model = "unknown";
-  if (state.app.config.llm && state.app.config.llm.anthropic && state.app.config.llm.anthropic.model) {
-    model = state.app.config.llm.anthropic.model;
+  if (state.app.config.llm) {
+    if (state.app.config.llm.anthropic) {
+      if (state.app.config.llm.anthropic.model) {
+        model = state.app.config.llm.anthropic.model;
+      }
+    }
   }
   return "gs-agent  provider=" + agent.provider + "  model=" + model + "  maxTurns=" + String(agent.maxTurns) + "  tools=" + String(toolCount);
 }
@@ -140,26 +128,19 @@ function statusText(state) {
   if (state.answer) {
     answer = "  answer=ready";
   }
-  return run + dirty + "  events=" + String(state.events.length) + answer + error;
+  let log = "";
+  if (state.app.latestLogFile) {
+    log = "  log=.agent/logs/latest.log";
+  }
+  return run + dirty + "  events=" + String(state.events.length) + answer + error + log;
 }
 
 function drawTask(state, width, height) {
   let out = [];
-  out.push(BOLD + "Task" + RESET + " " + DIM + state.app.taskFile + RESET);
+  out.push(styleText("Task", { bold: true, fg: "accent" }) + " " + styleText(state.app.taskFile, { dim: true, fg: "muted" }));
   let lines = splitLines(state.taskText);
   let bodyHeight = height - 1;
   let offset = state.taskScroll;
-  if (state.focus === "task") {
-    let currentLine = state.cursorLine;
-    if (currentLine < offset) {
-      offset = currentLine;
-      state.taskScroll = offset;
-    }
-    if (currentLine >= offset + bodyHeight) {
-      offset = currentLine - bodyHeight + 1;
-      state.taskScroll = offset;
-    }
-  }
 
   for (let i = 0; i < bodyHeight; i = i + 1) {
     let prefix = "  ";
@@ -172,9 +153,9 @@ function drawTask(state, width, height) {
   while (out.length < height) {
     out.push("");
   }
-  return out.map(function(item) {
+  return addScrollbar(out.map(function(item) {
     return line(item, width);
-  });
+  }), width, 1, state.taskScroll, splitLines(state.taskText).length);
 }
 
 function takeAroundCursor(text, cursor, width) {
@@ -227,7 +208,7 @@ function drawComposer(state, width, height) {
   let currentLine = state.cursorLine + 1;
   let title = "Input " + state.app.taskFile + "  line " + String(currentLine) + "/" + String(lines.length);
   let out = [];
-  out.push(BOLD + title + RESET);
+  out.push(styleText(title, { bold: true, fg: "accent" }));
 
   // 输入区固定占用整行宽度，避免编辑文本挤到右侧 Timeline 区域。
   let inputWidth = width - 2;
@@ -241,7 +222,7 @@ function drawComposer(state, width, height) {
     if (state.focus !== "task") {
       summary = summary + "  focus=" + state.focus;
     }
-    out.push(DIM + summary + RESET);
+    out.push(styleText(summary, { dim: true, fg: "muted" }));
   }
 
   while (out.length < height) {
@@ -254,17 +235,9 @@ function drawComposer(state, width, height) {
 
 function drawTimeline(state, width, height) {
   let out = [];
-  out.push(BOLD + "Run Timeline" + RESET);
+  out.push(styleText("Run Timeline", { bold: true, fg: "accent" }));
   let bodyHeight = height - 1;
   let offset = state.eventScroll;
-  if (state.selectedEvent < offset) {
-    offset = state.selectedEvent;
-    state.eventScroll = offset;
-  }
-  if (state.selectedEvent >= offset + bodyHeight) {
-    offset = state.selectedEvent - bodyHeight + 1;
-    state.eventScroll = offset;
-  }
 
   for (let i = 0; i < bodyHeight; i = i + 1) {
     let index = offset + i;
@@ -280,9 +253,7 @@ function drawTimeline(state, width, height) {
   while (out.length < height) {
     out.push("");
   }
-  return out.map(function(item) {
-    return line(item, width);
-  });
+  return addScrollbar(renderLines(out, width, height), width, 1, state.eventScroll, state.events.length);
 }
 
 function drawDetails(state, width, height) {
@@ -291,27 +262,71 @@ function drawDetails(state, width, height) {
     event = state.events[state.selectedEvent];
   }
   let text = eventDetails(event);
-  if (!event && state.answer) {
-    text = state.answer;
+  if (!event) {
+    if (state.answer) {
+      text = state.answer;
+    }
   }
-  let lines = splitLines(text);
+  let bodyHeight = height - 1;
+  if (bodyHeight < 1) {
+    bodyHeight = 1;
+  }
+  let lines = wrapText(text, width - 1);
+  let maxScroll = lines.length - bodyHeight;
+  if (maxScroll < 0) {
+    maxScroll = 0;
+  }
+  let detailScroll = clampScroll(state.detailScroll, maxScroll);
   let out = [];
-  out.push(BOLD + "Details" + RESET);
-  for (let i = 0; i < height - 1; i = i + 1) {
-    out.push(takeLine(lines, state.detailScroll + i));
+  out.push(styleText(scrollTitle("Details", detailScroll, bodyHeight, lines.length), { bold: true, fg: "accent" }));
+  for (let i = 0; i < bodyHeight; i = i + 1) {
+    out.push(takeLine(lines, detailScroll + i));
   }
   while (out.length < height) {
     out.push("");
   }
-  return out.map(function(item) {
+  return addScrollbar(out.map(function(item) {
     return line(item, width);
-  });
+  }), width, 1, detailScroll, lines.length);
 }
 
-function joinColumns(left, right, leftWidth, rightWidth) {
+function addScrollbar(rows, width, headerRows, offset, total) {
+  if (width < 4 || rows.length <= headerRows) {
+    return rows;
+  }
+  let bodyHeight = rows.length - headerRows;
+  let maxScroll = total - bodyHeight;
+  if (maxScroll < 0) {
+    maxScroll = 0;
+  }
+  let thumbSize = bodyHeight;
+  let thumbStart = 0;
+  if (total > bodyHeight) {
+    thumbSize = Math.floor(bodyHeight * bodyHeight / total);
+    if (thumbSize < 1) {
+      thumbSize = 1;
+    }
+    let track = bodyHeight - thumbSize;
+    if (track < 0) {
+      track = 0;
+    }
+    if (maxScroll > 0) {
+      thumbStart = Math.floor(offset * track / maxScroll);
+    }
+  }
+
   let out = [];
-  for (let i = 0; i < left.length; i = i + 1) {
-    out.push(line(left[i], leftWidth) + "|" + line(right[i], rightWidth));
+  for (let i = 0; i < rows.length; i = i + 1) {
+    let marker = " ";
+    if (i >= headerRows) {
+      let pos = i - headerRows;
+      marker = "|";
+      if (pos >= thumbStart && pos < thumbStart + thumbSize) {
+        marker = "#";
+      }
+      marker = styleText(marker, { fg: "muted" });
+    }
+    out.push(line(rows[i], width - 1) + marker);
   }
   return out;
 }
@@ -336,7 +351,8 @@ export function renderFrame(state) {
   if (available < 7) {
     available = 7;
   }
-  let topHeight = Math.floor(available * 0.58);
+  // 回答区是 agent TUI 的主要阅读区域，默认给它更多高度。
+  let topHeight = Math.floor(available * 0.44);
   if (topHeight < 4) {
     topHeight = 4;
   }
@@ -360,18 +376,28 @@ export function renderFrame(state) {
   lines.push(header);
   lines.push(status);
   lines.push(border(cols));
+  let topStart = lines.length + 1;
   for (let row of joinColumns(task, timeline, leftWidth, rightWidth)) {
     lines.push(row);
   }
   lines.push(border(cols));
+  let detailsStart = lines.length + 1;
   for (let row of details) {
     lines.push(row);
   }
   lines.push(border(cols));
+  let composerStart = lines.length + 1;
   for (let row of composer) {
     lines.push(row);
   }
   lines.push(footer);
+
+  state.layout = {
+    task: { row: topStart, col: 1, height: topHeight, width: leftWidth },
+    timeline: { row: topStart, col: leftWidth + 2, height: topHeight, width: rightWidth },
+    details: { row: detailsStart, col: 1, height: detailHeight, width: cols },
+    composer: { row: composerStart, col: 1, height: composerHeight, width: cols },
+  };
 
   return lines.join("\n");
 }

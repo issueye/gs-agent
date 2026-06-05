@@ -338,7 +338,7 @@ terminal.start({
 
 ### TUI smoke
 
-- 启动 `tui.gs`。
+- 正式启动入口使用 `--tui`；`tui.gs` 仅保留为开发调试入口。
 - 输入一段任务。
 - 保存任务。
 - 运行 fake provider。
@@ -360,7 +360,6 @@ terminal.start({
 3. 增加 resize 事件。
 4. 在 `gs-agent` 中抽出 `runAgentTask(options)`。
 5. 新增 `src/tui/ansi.gs`、`src/tui/keys.gs`、`src/tui/renderer.gs`。
-6. 新增 `tui.gs`，先做全屏重绘版。
+6. 新增 `tui.gs` 作为开发调试入口，正式命令使用 `--tui`。
 7. 使用 fake provider 做 TUI smoke。
 8. 再接入 DeepSeek 做真实接口测试。
-

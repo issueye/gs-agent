@@ -1,4 +1,4 @@
-import { BOLD, RESET, fg, padRight, truncateToWidth } from "@/tui/ansi";
+import { BOLD, RESET, color, padRight, truncateToWidth } from "@/tui/ansi";
 
 let SPINNER = ["-", "\\", "|", "/"];
 
@@ -22,9 +22,9 @@ export function loadingText(options) {
 
   let text = "";
   if (active) {
-    text = fg(33) + loadingFrame(tick) + RESET + " " + label;
+    text = color(loadingFrame(tick), "warning") + " " + label;
   } else {
-    text = fg(32) + "ok" + RESET + " " + label;
+    text = color("ok", "success") + " " + label;
   }
 
   return padRight(truncateToWidth(text, width), width);
@@ -36,4 +36,3 @@ export function compactLoading(active, tick, label) {
   }
   return "ok " + label;
 }
-

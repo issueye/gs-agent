@@ -4,9 +4,104 @@ export let RESET = "\x1b[0m";
 export let BOLD = "\x1b[1m";
 export let DIM = "\x1b[2m";
 export let INVERSE = "\x1b[7m";
+export let UNDERLINE = "\x1b[4m";
+
+let colorsEnabled = true;
+
+export let Color = {
+  black: 30,
+  red: 31,
+  green: 32,
+  yellow: 33,
+  blue: 34,
+  magenta: 35,
+  cyan: 36,
+  white: 37,
+  gray: 90,
+  brightRed: 91,
+  brightGreen: 92,
+  brightYellow: 93,
+  brightBlue: 94,
+  brightMagenta: 95,
+  brightCyan: 96,
+  brightWhite: 97,
+};
+
+export let Theme = {
+  accent: "cyan",
+  muted: "gray",
+  success: "green",
+  warning: "yellow",
+  error: "red",
+  info: "blue",
+  text: "white",
+  border: "gray",
+  focus: "brightCyan",
+};
+
+export function setColorEnabled(enabled) {
+  colorsEnabled = !!enabled;
+}
+
+export function isColorEnabled() {
+  return colorsEnabled;
+}
 
 export function fg(color) {
+  if (!colorsEnabled) {
+    return "";
+  }
   return "\x1b[" + String(color) + "m";
+}
+
+export function colorCode(nameOrCode) {
+  if (typeof nameOrCode === "number") {
+    return nameOrCode;
+  }
+  let name = String(nameOrCode || "");
+  if (name in Theme) {
+    name = Theme[name];
+  }
+  if (name in Color) {
+    return Color[name];
+  }
+  return Color.white;
+}
+
+export function color(text, nameOrCode) {
+  if (!colorsEnabled) {
+    return String(text);
+  }
+  return fg(colorCode(nameOrCode)) + String(text) + RESET;
+}
+
+export function styleText(text, styles) {
+  if (!colorsEnabled) {
+    return String(text);
+  }
+  let codes = "";
+  if (!styles) {
+    return String(text);
+  }
+  if (styles.bold) {
+    codes = codes + BOLD;
+  }
+  if (styles.dim) {
+    codes = codes + DIM;
+  }
+  if (styles.inverse) {
+    codes = codes + INVERSE;
+  }
+  if (styles.underline) {
+    codes = codes + UNDERLINE;
+  }
+  if (styles.fg) {
+    codes = codes + fg(colorCode(styles.fg));
+  }
+  if (codes === "") {
+    return String(text);
+  }
+  return codes + String(text) + RESET;
 }
 
 export function clearScreen() {
@@ -37,7 +132,18 @@ export function showCursor() {
   return "\x1b[?25h";
 }
 
+export function enableMouse() {
+  return "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
+}
+
+export function disableMouse() {
+  return "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
+}
+
 export function style(text, code) {
+  if (!colorsEnabled) {
+    return String(text);
+  }
   return code + text + RESET;
 }
 
@@ -66,15 +172,15 @@ export function charWidth(ch) {
 
   // CJK、全角标点和常见 emoji 在终端里通常占两列。
   if (
-    (code >= 0x1100 && code <= 0x115f) ||
-    (code >= 0x2e80 && code <= 0xa4cf) ||
-    (code >= 0xac00 && code <= 0xd7a3) ||
-    (code >= 0xf900 && code <= 0xfaff) ||
-    (code >= 0xfe10 && code <= 0xfe19) ||
-    (code >= 0xfe30 && code <= 0xfe6f) ||
-    (code >= 0xff00 && code <= 0xff60) ||
-    (code >= 0xffe0 && code <= 0xffe6) ||
-    (code >= 0x1f300 && code <= 0x1faff)
+    (code >= 4352 && code <= 4447) ||
+    (code >= 11904 && code <= 42191) ||
+    (code >= 44032 && code <= 55203) ||
+    (code >= 63744 && code <= 64255) ||
+    (code >= 65040 && code <= 65049) ||
+    (code >= 65072 && code <= 65135) ||
+    (code >= 65280 && code <= 65376) ||
+    (code >= 65504 && code <= 65510) ||
+    (code >= 127744 && code <= 129791)
   ) {
     return 2;
   }
@@ -96,16 +202,29 @@ export function visibleWidth(text) {
 }
 
 export function truncateToWidth(text, width) {
-  let clean = chars(stripAnsi(text));
+  let source = String(text);
   let out = "";
   let used = 0;
-  for (let ch of clean) {
+  let i = 0;
+  while (i < source.length) {
+    let rest = source.slice(i);
+    if (rest.startsWith(ESC + "[")) {
+      let end = rest.indexOf("m");
+      if (end >= 0) {
+        out = out + rest.slice(0, end + 1);
+        i = i + end + 1;
+        continue;
+      }
+    }
+
+    let ch = chars(rest)[0];
     let next = charWidth(ch);
     if (used + next > width) {
       break;
     }
     out = out + ch;
     used = used + next;
+    i = i + ch.length;
   }
   return out;
 }
