@@ -1,4 +1,4 @@
-import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, padRight, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
+import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, padRight, repeatText, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
 import { compactLoading } from "@/tui/loading";
 import { Markdown } from "@/tui/components";
 import { banner, border, clampScroll, joinColumns, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
@@ -10,22 +10,39 @@ function safeText(value) {
   return String(value);
 }
 
-function bannerLines(width) {
-  let wide = [
-    "  ____ ____        _    ____ _____ _   _ _____ ",
-    " / ___/ ___|      / \\  / ___| ____| \\ | |_   _|",
-    "| |  _\\___ \\_____/ _ \\| |  _|  _| |  \\| | | |  ",
-    "| |_| |___) |___/ ___ \\ |_| | |___| |\\  | | |  ",
-    " \\____|____/   /_/   \\_\\____|_____|_| \\_| |_|  ",
-  ];
+function welcomePanel(state, width) {
+  let model = "unknown";
+  if (state.app.config.llm) {
+    if (state.app.config.llm.anthropic) {
+      if (state.app.config.llm.anthropic.model) {
+        model = state.app.config.llm.anthropic.model;
+      }
+    }
+  }
+  let root = safeText(state.app.root);
+  if (root === "") {
+    root = ".";
+  }
 
-  return banner({
-    width: width,
-    title: "GS-AGENT",
-    wide: wide,
-    minWidth: 76,
-    color: 36,
-  });
+  let title = " gs-agent ";
+  let version = " TUI ";
+  let inner = width - 4;
+  if (inner < 20) {
+    inner = 20;
+  }
+  let topFill = width - visibleWidth(title) - visibleWidth(version) - 2;
+  if (topFill < 0) {
+    topFill = 0;
+  }
+  let top = "+" + styleText(title, { bold: true, fg: "warning" }) + repeatText("-", topFill) + styleText(version, { dim: true, fg: "muted" }) + "+";
+  let rows = [];
+  rows.push(line(top, width));
+  rows.push(color("|", "warning") + line(" Welcome back!  Continue the session, call tools, and refine the answer.", inner) + color("|", "warning"));
+  rows.push(color("|", "warning") + line(" Tips: Ctrl+R send message  Ctrl+O load session  Tab focus  mouse wheel scroll", inner) + color("|", "warning"));
+  rows.push(color("|", "warning") + line(" Model: " + model + "  Project: " + root, inner) + color("|", "warning"));
+  rows.push(color("|", "warning") + line(" Input starts from " + state.app.taskFile + "; after sending, type the next question directly.", inner) + color("|", "warning"));
+  rows.push(line(color("+" + repeatText("-", width - 2) + "+", "warning"), width));
+  return rows;
 }
 
 function eventTitle(event) {
@@ -133,7 +150,11 @@ function statusText(state) {
   if (state.app.latestLogFile) {
     log = "  log=.agent/logs/latest.log";
   }
-  return run + dirty + "  events=" + String(state.events.length) + answer + error + log;
+  let messages = "";
+  if (state.messages) {
+    messages = "  messages=" + String(state.messages.length);
+  }
+  return run + dirty + "  events=" + String(state.events.length) + messages + answer + error + log;
 }
 
 function drawTask(state, width, height) {
@@ -207,9 +228,9 @@ function drawComposer(state, width, height) {
   let lines = splitLines(state.taskText);
   let current = takeLine(lines, state.cursorLine);
   let currentLine = state.cursorLine + 1;
-  let title = "Input " + state.app.taskFile + "  line " + String(currentLine) + "/" + String(lines.length);
+  let title = "Prompt  line " + String(currentLine) + "/" + String(lines.length);
   let out = [];
-  out.push(styleText(title, { bold: true, fg: "accent" }));
+  out.push(styleText(title, { bold: true, fg: "text" }) + styleText("  Ctrl+R to send", { dim: true, fg: "muted" }));
 
   // 输入区固定占用整行宽度，避免编辑文本挤到右侧 Timeline 区域。
   let inputWidth = width - 2;
@@ -219,7 +240,7 @@ function drawComposer(state, width, height) {
   out.push("> " + takeAroundCursor(current, state.cursorCol, inputWidth));
 
   if (height > 2) {
-    let summary = "chars=" + String(chars(state.taskText).length) + "  width=" + String(visibleWidth(current));
+    let summary = "esc to quit  chars=" + String(chars(state.taskText).length) + "  width=" + String(visibleWidth(current));
     if (state.focus !== "task") {
       summary = summary + "  focus=" + state.focus;
     }
@@ -232,6 +253,151 @@ function drawComposer(state, width, height) {
   return out.map(function(item) {
     return line(item, width);
   });
+}
+
+function pushWrappedWithPrefix(out, prefix, text, width, style) {
+  let bodyWidth = width - visibleWidth(prefix);
+  if (bodyWidth < 8) {
+    bodyWidth = width;
+    prefix = "";
+  }
+  let rows = wrapText(text, bodyWidth);
+  for (let i = 0; i < rows.length; i = i + 1) {
+    let mark = prefix;
+    if (i > 0) {
+      mark = repeatText(" ", visibleWidth(prefix));
+    }
+    let row = mark + rows[i];
+    if (style) {
+      row = styleText(row, style);
+    }
+    out.push(line(row, width));
+  }
+}
+
+function compactJson(value) {
+  if (!value) {
+    return "{}";
+  }
+  let text = JSON.stringify(value);
+  if (!text) {
+    return "{}";
+  }
+  return text;
+}
+
+function transcriptRows(state, width) {
+  if (state.transcriptCache) {
+    if (state.transcriptCache.width === width && state.transcriptCache.events === state.events.length) {
+      return state.transcriptCache.rows;
+    }
+  }
+
+  let out = [];
+  if (state.events.length === 0) {
+    out.push(styleText("No messages yet. Write a task below and press Ctrl+R.", { dim: true, fg: "muted" }));
+    out.push(styleText("Use Ctrl+O to restore the latest session.", { dim: true, fg: "muted" }));
+    state.transcriptCache = {
+      width: width,
+      events: state.events.length,
+      rows: out,
+    };
+    return out;
+  }
+
+  for (let event of state.events) {
+    let payload = event.payload;
+    if (!payload) {
+      continue;
+    }
+
+    if (event.kind === "message") {
+      if (payload.role === "user") {
+        out.push(styleText(line("> " + safeText(payload.content).split("\n")[0], width), { inverse: true }));
+        let rest = splitLines(safeText(payload.content));
+        for (let i = 1; i < rest.length; i = i + 1) {
+          out.push(styleText(line("  " + rest[i], width), { inverse: true }));
+        }
+        out.push("");
+        continue;
+      }
+      if (payload.role === "assistant") {
+        let md = Markdown({
+          width: width - 2,
+          text: safeText(payload.content),
+        });
+        for (let row of md) {
+          out.push(line("  " + row, width));
+        }
+        out.push("");
+        continue;
+      }
+    }
+
+    if (event.kind === "tool_call") {
+      let label = "Tool(" + safeText(payload.name) + ")";
+      out.push(color("* ", "success") + styleText(label, { bold: true, fg: "text" }) + styleText(" " + compactJson(payload.args), { dim: true, fg: "muted" }));
+      continue;
+    }
+
+    if (event.kind === "tool_result") {
+      pushWrappedWithPrefix(out, "  | ", truncateToWidth(safeText(payload.content), width * 2), width, { dim: true, fg: "muted" });
+      continue;
+    }
+
+    if (event.kind === "answer") {
+      let answerRows = Markdown({
+        width: width - 2,
+        text: safeText(payload.content),
+      });
+      for (let row of answerRows) {
+        out.push(line("  " + row, width));
+      }
+      out.push("");
+      continue;
+    }
+
+    if (event.kind === "turn_end") {
+      out.push(styleText("  turn " + String(payload.turn) + " ended: " + safeText(payload.stop), { dim: true, fg: "muted" }));
+      continue;
+    }
+
+    if (event.kind === "error") {
+      pushWrappedWithPrefix(out, "x ", safeText(payload.message), width, { bold: true, fg: "error" });
+      continue;
+    }
+  }
+
+  while (out.length > 0 && out[out.length - 1] === "") {
+    out.pop();
+  }
+  state.transcriptCache = {
+    width: width,
+    events: state.events.length,
+    rows: out,
+  };
+  return out;
+}
+
+function drawTranscript(state, width, height) {
+  let bodyHeight = height - 1;
+  if (bodyHeight < 1) {
+    bodyHeight = 1;
+  }
+  let rows = transcriptRows(state, width - 1);
+  let maxScroll = rows.length - bodyHeight;
+  if (maxScroll < 0) {
+    maxScroll = 0;
+  }
+  let offset = clampScroll(state.detailScroll, maxScroll);
+  let out = [];
+  out.push(styleText(scrollTitle("Transcript", offset, bodyHeight, rows.length), { bold: true, fg: "text" }));
+  for (let i = 0; i < bodyHeight; i = i + 1) {
+    out.push(takeLine(rows, offset + i));
+  }
+  return addScrollbar(out.map(function(item) {
+    return line(item, width);
+  }), width, 1, offset, rows.length);
 }
 
 function drawTimeline(state, width, height) {
@@ -346,47 +512,31 @@ export function renderFrame(state) {
     rows = 12;
   }
 
-  let banner = bannerLines(cols);
+  let welcome = welcomePanel(state, cols);
   let header = line(configLabel(state), cols);
   let status = line(statusText(state), cols);
-  let footer = line("Ctrl+R Run  Ctrl+S Save  Ctrl+O Load Session  Tab Focus  Arrows/Page Scroll  Ctrl+Q/Esc Quit", cols);
+  let footer = line("Ctrl+R Send  Ctrl+S Save  Ctrl+O Load Session  Tab Focus  Arrows/Page Scroll  Ctrl+Q/Esc Quit", cols);
   let composerHeight = 3;
-  let available = rows - banner.length - composerHeight - 6;
+  let available = rows - welcome.length - composerHeight - 4;
   if (available < 7) {
     available = 7;
   }
-  // 回答区是 agent TUI 的主要阅读区域，默认给它更多高度。
-  let topHeight = Math.floor(available * 0.44);
-  if (topHeight < 4) {
-    topHeight = 4;
+  let transcriptHeight = available;
+  if (transcriptHeight < 4) {
+    transcriptHeight = 4;
   }
-  let detailHeight = available - topHeight;
-  if (detailHeight < 3) {
-    detailHeight = 3;
-    topHeight = available - detailHeight;
-  }
-  let leftWidth = Math.floor((cols - 1) * 0.42);
-  let rightWidth = cols - 1 - leftWidth;
-
-  let task = drawTask(state, leftWidth, topHeight);
-  let timeline = drawTimeline(state, rightWidth, topHeight);
-  let details = drawDetails(state, cols, detailHeight);
+  let transcript = drawTranscript(state, cols, transcriptHeight);
   let composer = drawComposer(state, cols, composerHeight);
 
   let lines = [];
-  for (let row of banner) {
+  for (let row of welcome) {
     lines.push(row);
   }
   lines.push(header);
   lines.push(status);
   lines.push(border(cols));
-  let topStart = lines.length + 1;
-  for (let row of joinColumns(task, timeline, leftWidth, rightWidth)) {
-    lines.push(row);
-  }
-  lines.push(border(cols));
   let detailsStart = lines.length + 1;
-  for (let row of details) {
+  for (let row of transcript) {
     lines.push(row);
   }
   lines.push(border(cols));
@@ -397,9 +547,8 @@ export function renderFrame(state) {
   lines.push(footer);
 
   state.layout = {
-    task: { row: topStart, col: 1, height: topHeight, width: leftWidth },
-    timeline: { row: topStart, col: leftWidth + 2, height: topHeight, width: rightWidth },
-    details: { row: detailsStart, col: 1, height: detailHeight, width: cols },
+    task: { row: composerStart, col: 1, height: composerHeight, width: cols },
+    details: { row: detailsStart, col: 1, height: transcriptHeight, width: cols },
     composer: { row: composerStart, col: 1, height: composerHeight, width: cols },
   };
 

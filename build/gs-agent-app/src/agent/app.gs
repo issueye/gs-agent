@@ -68,6 +68,43 @@ function agentConfig(config) {
   return agent;
 }
 
+function modelInfo(app) {
+  let model = "unknown";
+  let baseUrl = "";
+  if (app.config.llm) {
+    if (app.config.llm.anthropic) {
+      if (app.config.llm.anthropic.model) {
+        model = app.config.llm.anthropic.model;
+      }
+      if (app.config.llm.anthropic.baseUrl) {
+        baseUrl = app.config.llm.anthropic.baseUrl;
+      }
+    }
+  }
+  return {
+    model: model,
+    baseUrl: baseUrl,
+  };
+}
+
+function createAppKit(app, logger, onEvent) {
+  return createCodingAgent({
+    cwd: app.root,
+    includeCodingTools: app.agent.includeCodingTools,
+    enabledTools: app.agent.tools,
+    provider: createProvider(app.config, app.agent),
+    tools: createWorkspaceTools(app.workspace),
+    sessionFile: app.sessionFile,
+    maxTurns: app.agent.maxTurns,
+    onEvent: function(event) {
+      logger.info("agent event", eventLogFields(event));
+      if (onEvent) {
+        onEvent(event);
+      }
+    },
+  });
+}
+
 // TUI 和命令行共用的任务读取函数；TUI 启动时允许文件尚不存在。
 export function readTaskText(root, taskFile) {
   let target = path.resolve(path.join(root, taskFile));
@@ -146,23 +183,12 @@ export function runAgentTask(options) {
     fs.unlinkSync(sessionFile);
   }
 
-  let model = "unknown";
-  let baseUrl = "";
-  if (app.config.llm) {
-    if (app.config.llm.anthropic) {
-      if (app.config.llm.anthropic.model) {
-        model = app.config.llm.anthropic.model;
-      }
-      if (app.config.llm.anthropic.baseUrl) {
-        baseUrl = app.config.llm.anthropic.baseUrl;
-      }
-    }
-  }
+  let info = modelInfo(app);
   logger.info("agent run started", {
     root: app.root,
     provider: app.agent.provider,
-    model: model,
-    baseUrl: baseUrl,
+    model: info.model,
+    baseUrl: info.baseUrl,
     maxTurns: app.agent.maxTurns,
     tools: app.agent.tools,
     taskFile: app.taskFile,
@@ -170,21 +196,7 @@ export function runAgentTask(options) {
     answerFile: app.answerFile,
   });
 
-  let kit = createCodingAgent({
-    cwd: app.root,
-    includeCodingTools: app.agent.includeCodingTools,
-    enabledTools: app.agent.tools,
-    provider: createProvider(app.config, app.agent),
-    tools: createWorkspaceTools(app.workspace),
-    sessionFile: sessionFile,
-    maxTurns: app.agent.maxTurns,
-    onEvent: function(event) {
-      logger.info("agent event", eventLogFields(event));
-      if (options.onEvent) {
-        options.onEvent(event);
-      }
-    },
-  });
+  let kit = createAppKit(app, logger, options.onEvent);
 
   // agent.run 是同步闭环：模型 -> 工具 -> 模型，直到最终回答或达到 maxTurns。
   let answer = undefined;
@@ -209,6 +221,71 @@ export function runAgentTask(options) {
     };
   } catch (err) {
     logger.error("agent run failed", {
+      error: String(err),
+    });
+    throw err;
+  }
+}
+
+// TUI 对话入口：不清空 session，调用方持有 messages 才能形成真实多轮上下文。
+export function runAgentTurn(options) {
+  let app = options.app;
+  if (!app) {
+    app = loadAgentApp(options.root);
+  }
+  let logger = options.logger;
+  if (!logger) {
+    logger = createRunLogger(app.root, "agent");
+  }
+
+  let input = options.input;
+  if (!input || input.trim() === "") {
+    throw new ReferenceError("message is empty");
+  }
+
+  let messages = options.messages;
+  if (!messages) {
+    messages = [];
+  }
+
+  let info = modelInfo(app);
+  logger.info("agent turn started", {
+    root: app.root,
+    provider: app.agent.provider,
+    model: info.model,
+    baseUrl: info.baseUrl,
+    maxTurns: app.agent.maxTurns,
+    tools: app.agent.tools,
+    messages: messages.length,
+    sessionFile: app.sessionFile,
+    answerFile: app.answerFile,
+  });
+
+  let kit = createAppKit(app, logger, options.onEvent);
+
+  try {
+    let answer = kit.agent.runMessages(messages, input.trim());
+    let records = kit.session.readAll();
+    fs.mkdirSync(path.dirname(app.answerFile), { recursive: true });
+    fs.writeTextSync(app.answerFile, answer.content + "\n");
+    logger.info("agent turn finished", {
+      events: records.length,
+      messages: messages.length,
+      answerFile: app.answerFile,
+      sessionFile: app.sessionFile,
+    });
+
+    return {
+      answer: answer.content,
+      messages: messages,
+      events: records.length,
+      sessionFile: app.sessionFile,
+      answerFile: app.answerFile,
+      logFile: app.logFile,
+      latestLogFile: app.latestLogFile,
+    };
+  } catch (err) {
+    logger.error("agent turn failed", {
       error: String(err),
     });
     throw err;

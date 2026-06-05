@@ -89,11 +89,11 @@ let state = {
 
 let frame = renderFrame(state);
 assert(frame.includes("gs-agent"), "header");
-assert(frame.includes("GS-AGENT") || frame.includes("____"), "banner");
+assert(frame.includes("Welcome back"), "welcome panel");
 assert(frame.includes("read_file"), "tool event");
-assert(frame.includes("Details"), "details");
+assert(frame.includes("Transcript"), "transcript");
 assert(frame.includes("#") || frame.includes("|"), "scrollbar render");
-assert(frame.includes("Input workspace/task.txt"), "composer");
+assert(frame.includes("Prompt"), "composer");
 assert(frame.includes("读取 README.md 并总结"), "zh render");
 assert(frame.includes("answer=ready"), "answer status");
 assert(frame.includes("最终答案"), "answer render");
@@ -111,6 +111,27 @@ markdownState.focus = "details";
 let markdownFrame = renderFrame(markdownState);
 assert(markdownFrame.includes("\x1b["), "details markdown styled");
 assert(markdownFrame.includes("python"), "details markdown code language");
+assert(markdownState.transcriptCache.rows.length > 0, "transcript cache populated");
+
+let longTranscriptState = state;
+longTranscriptState.events = [];
+longTranscriptState.detailScroll = 0;
+longTranscriptState.transcriptCache = null;
+longTranscriptState.transcriptMeasureCache = null;
+for (let i = 0; i < 80; i = i + 1) {
+  longTranscriptState.events.push({
+    kind: "message",
+    payload: {
+      role: "assistant",
+      content: "# 回答 " + String(i) + "\n\n这是一个用于滚动测试的较长 markdown 段落，包含 **加粗** 和 `code`。",
+    },
+  });
+}
+renderFrame(longTranscriptState);
+let cachedRows = longTranscriptState.transcriptCache.rows;
+longTranscriptState.detailScroll = 20;
+renderFrame(longTranscriptState);
+assert(longTranscriptState.transcriptCache.rows === cachedRows, "scroll render reuses transcript cache");
 
 let longState = state;
 longState.taskText = "你能干什么".repeat(30);
@@ -125,7 +146,7 @@ for (let row of frameLines) {
   }
 }
 assert(inputLines.length === 1, "one composer input line");
-assert(!inputLines[0].includes("|Run Timeline"), "composer isolated from timeline");
+assert(!inputLines[0].includes("Transcript"), "composer isolated from transcript");
 
 let sideEffectState = {
   app: state.app,

@@ -1,4 +1,4 @@
-import { loadAgentApp, readTaskText, runAgentTask, writeTaskText } from "@/agent/app";
+import { loadAgentApp, readTaskText, runAgentTurn, writeTaskText } from "@/agent/app";
 import { createRunLogger, eventLogFields } from "@/agent/log";
 import { charWidth, chars } from "@/tui/ansi";
 import { renderFrame } from "@/tui/renderer";
@@ -56,6 +56,7 @@ function createStateWithSize(app, size) {
     tick: 0,
     focus: "task",
     events: [],
+    messages: [],
     selectedEvent: -1,
     eventScroll: 0,
     detailScroll: 0,
@@ -63,13 +64,21 @@ function createStateWithSize(app, size) {
     error: "",
     confirmExit: false,
     shouldExit: false,
+    transcriptCache: null,
+    transcriptMeasureCache: null,
   };
+}
+
+function invalidateTranscript(state) {
+  state.transcriptCache = null;
+  state.transcriptMeasureCache = null;
 }
 
 function addEvent(state, event) {
   state.events.push(event);
   state.selectedEvent = state.events.length - 1;
   state.detailScroll = 0;
+  invalidateTranscript(state);
 }
 
 function sanitizeError(err) {
@@ -115,8 +124,55 @@ function appendAnswerEvent(state) {
   });
 }
 
+function messageFromEvent(event) {
+  if (!event) {
+    return undefined;
+  }
+  let payload = event.payload;
+  if (!payload) {
+    return undefined;
+  }
+  if (event.kind === "message") {
+    if (payload.role === "user" || payload.role === "assistant") {
+      return {
+        role: payload.role,
+        content: payload.content,
+      };
+    }
+  }
+  if (event.kind === "tool_call") {
+    return {
+      kind: "tool_call",
+      id: payload.id,
+      name: payload.name,
+      args: payload.args,
+    };
+  }
+  if (event.kind === "tool_result") {
+    return {
+      role: "tool",
+      id: payload.id,
+      name: payload.name,
+      content: payload.content,
+    };
+  }
+  return undefined;
+}
+
+function restoreMessages(events) {
+  let messages = [];
+  for (let event of events) {
+    let message = messageFromEvent(event);
+    if (message) {
+      messages.push(message);
+    }
+  }
+  return messages;
+}
+
 function loadRecentSession(state) {
   state.events = [];
+  invalidateTranscript(state);
   if (fs.existsSync(state.app.sessionFile)) {
     let lines = fs.readFileSync(state.app.sessionFile).split("\n");
     for (let line of lines) {
@@ -126,6 +182,8 @@ function loadRecentSession(state) {
       }
     }
   }
+  state.messages = restoreMessages(state.events);
+  invalidateTranscript(state);
   state.answer = readAnswer(state);
   appendAnswerEvent(state);
   state.selectedEvent = selectedEventIndex(state);
@@ -139,11 +197,20 @@ function loadRecentSession(state) {
     sessionFile: state.app.sessionFile,
     answerFile: state.app.answerFile,
     events: state.events.length,
+    messages: state.messages.length,
     hasAnswer: !!state.answer,
   });
 }
 
-function runTask(state, ctx) {
+function clearInput(state) {
+  state.taskText = "";
+  state.taskScroll = 0;
+  state.cursorLine = 0;
+  state.cursorCol = 0;
+  state.dirty = false;
+}
+
+function sendMessage(state, ctx) {
   if (state.running) {
     state.error = "already running";
     return;
@@ -154,24 +221,24 @@ function runTask(state, ctx) {
     return;
   }
 
+  let input = state.taskText.trim();
   saveTask(state);
   state.running = true;
   state.error = "";
-  state.events = [];
-  state.selectedEvent = -1;
-  state.eventScroll = 0;
   state.detailScroll = 0;
-  state.logger.info("run requested", {
+  state.logger.info("message send requested", {
     taskFile: state.app.taskFile,
-    chars: chars(state.taskText).length,
+    chars: chars(input).length,
+    messages: state.messages.length,
   });
   ctx.render();
 
   try {
-    let result = runAgentTask({
+    let result = runAgentTurn({
       app: state.app,
       logger: state.logger.child("agent"),
-      taskText: state.taskText,
+      messages: state.messages,
+      input: input,
       onEvent: function(event) {
         addEvent(state, event);
         state.logger.info("tui received event", eventLogFields(event));
@@ -179,16 +246,19 @@ function runTask(state, ctx) {
       },
     });
     state.answer = result.answer;
+    state.messages = result.messages;
     appendAnswerEvent(state);
+    clearInput(state);
     state.error = "done";
-    state.logger.info("run completed", {
+    state.logger.info("message send completed", {
       events: result.events,
+      messages: state.messages.length,
       answerFile: result.answerFile,
       sessionFile: result.sessionFile,
     });
   } catch (err) {
     state.error = sanitizeError(err);
-    state.logger.error("run failed", {
+    state.logger.error("message send failed", {
       error: String(err),
     });
     addEvent(state, {
@@ -339,7 +409,79 @@ function currentDetailText(state) {
   return JSON.stringify(event, null, 2);
 }
 
+function eventTextForTranscript(event) {
+  if (!event) {
+    return "";
+  }
+  let payload = event.payload;
+  if (!payload) {
+    return "";
+  }
+  if (event.kind === "message") {
+    return String(payload.content || "");
+  }
+  if (event.kind === "tool_call") {
+    return "Tool(" + String(payload.name || "") + ") " + JSON.stringify(payload.args || {});
+  }
+  if (event.kind === "tool_result") {
+    return String(payload.content || "");
+  }
+  if (event.kind === "turn_end") {
+    return "turn " + String(payload.turn) + " ended: " + String(payload.stop || "");
+  }
+  if (event.kind === "error") {
+    return String(payload.message || "");
+  }
+  if (event.kind === "answer") {
+    return String(payload.content || "");
+  }
+  return JSON.stringify(event);
+}
+
+function estimateTranscriptLines(state, width) {
+  if (state.transcriptCache) {
+    if (state.transcriptCache.width === width && state.transcriptCache.events === state.events.length) {
+      return state.transcriptCache.rows.length;
+    }
+  }
+  if (state.transcriptMeasureCache) {
+    if (state.transcriptMeasureCache.width === width && state.transcriptMeasureCache.events === state.events.length) {
+      return state.transcriptMeasureCache.lines;
+    }
+  }
+
+  let total = 0;
+  if (state.events.length === 0) {
+    return 2;
+  }
+  for (let event of state.events) {
+    let lines = estimateWrappedLines(eventTextForTranscript(event), width);
+    if (lines < 1) {
+      lines = 1;
+    }
+    total = total + lines;
+    if (event.kind === "message") {
+      total = total + 1;
+    }
+  }
+  state.transcriptMeasureCache = {
+    width: width,
+    events: state.events.length,
+    lines: total,
+  };
+  return total;
+}
+
 function detailBodyHeight(state) {
+  if (state.layout) {
+    if (state.layout.details) {
+      let height = state.layout.details.height - 1;
+      if (height < 1) {
+        return 1;
+      }
+      return height;
+    }
+  }
   let bannerHeight = 5;
   if (state.cols < 76) {
     bannerHeight = 1;
@@ -432,7 +574,7 @@ function syncDetailViewport(state) {
   if (bodyHeight < 1) {
     bodyHeight = 1;
   }
-  let total = estimateWrappedLines(currentDetailText(state), state.cols);
+  let total = estimateTranscriptLines(state, state.cols - 1);
   let maxScroll = total - bodyHeight;
   if (maxScroll < 0) {
     maxScroll = 0;
@@ -451,7 +593,7 @@ function moveDetails(state, delta) {
   if (bodyHeight < 1) {
     bodyHeight = 1;
   }
-  let total = estimateWrappedLines(currentDetailText(state), state.cols);
+  let total = estimateTranscriptLines(state, state.cols - 1);
   let maxScroll = total - bodyHeight;
   if (maxScroll < 0) {
     maxScroll = 0;
@@ -519,22 +661,22 @@ function handleMouse(state, item) {
 
   if (item.action === "wheelUp") {
     if (region === "task") {
-      scrollTask(state, -3);
+      scrollTask(state, -1);
     } else if (region === "timeline") {
-      scrollTimeline(state, -3);
+      scrollTimeline(state, -1);
     } else if (region === "details") {
-      moveDetails(state, -3);
+      moveDetails(state, -1);
     }
     return;
   }
 
   if (item.action === "wheelDown") {
     if (region === "task") {
-      scrollTask(state, 3);
+      scrollTask(state, 1);
     } else if (region === "timeline") {
-      scrollTimeline(state, 3);
+      scrollTimeline(state, 1);
     } else if (region === "details") {
-      moveDetails(state, 3);
+      moveDetails(state, 1);
     }
   }
 }
@@ -580,7 +722,7 @@ function handleKey(state, item, ctx) {
   }
   if (item.id === "ctrl+r") {
     state.confirmExit = false;
-    runTask(state, ctx);
+    sendMessage(state, ctx);
     return;
   }
   if (item.id === "tab" || item.id === "shift+tab") {
@@ -682,6 +824,7 @@ export function runAgentTui() {
       syncViewState(state);
     },
     onResize: function(state) {
+      invalidateTranscript(state);
       syncViewState(state);
       state.logger.info("terminal resized", {
         cols: state.cols,

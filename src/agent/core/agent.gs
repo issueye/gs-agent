@@ -27,34 +27,40 @@ export function createAgent(options) {
     return event;
   }
 
-  // 最小 agent loop：用户消息进入上下文，模型可返回 tool_call 或最终 assistant 消息。
-  function run(input) {
-    let messages = [
-      { role: "user", content: input },
-    ];
+  // 对话入口：调用方传入同一个 messages 数组即可保留多轮上下文。
+  function runMessages(messages, input) {
+    if (!messages) {
+      messages = [];
+    }
 
-    emit("message", messages[0]);
+    if (input) {
+      let userMessage = { role: "user", content: input };
+      messages.push(userMessage);
+      emit("message", userMessage);
+    }
 
     for (let turn = 0; turn < maxTurns; turn = turn + 1) {
       emit("turn_start", { turn: turn });
       let allowTools = true;
+      let requestMessages = messages;
 
       // 最后一轮给模型明确收束信号，避免真实模型持续探索工具直到 maxTurns 用尽。
       if (turn === maxTurns - 1) {
         allowTools = false;
+        requestMessages = messages.slice(0);
         let finalInstruction = {
           role: "user",
           content: "This is the final turn. Do not call tools. Provide the best concise final answer from the information already available.",
         };
-        messages.push(finalInstruction);
-        emit("message", finalInstruction);
+        // 收束提示只参与本次请求，不写入长期对话历史，避免后续追问被内部提示污染。
+        requestMessages.push(finalInstruction);
       }
 
       let tools = registry.list();
       if (!allowTools) {
         tools = [];
       }
-      let next = provider.next(messages, tools, { allowTools: allowTools });
+      let next = provider.next(requestMessages, tools, { allowTools: allowTools });
       let textToolCall = parseTextToolCall(next.content, turn);
       if (textToolCall) {
         next = textToolCall;
@@ -64,6 +70,7 @@ export function createAgent(options) {
       if (next.kind === "tool_call") {
         if (!allowTools) {
           let blocked = blockedToolAnswer(next.source || "structured tool call");
+          messages.push(blocked);
           emit("message", blocked);
           emit("turn_end", { turn: turn, stop: "tool_call_blocked" });
           return blocked;
@@ -90,12 +97,14 @@ export function createAgent(options) {
 
       if (looksLikeTextToolCall(next.content)) {
         let blocked = blockedToolAnswer("text tool call");
+        messages.push(blocked);
         emit("message", blocked);
         emit("turn_end", { turn: turn, stop: "text_tool_call_blocked" });
         return blocked;
       }
 
       // 非工具调用即视为最终回答，结束本轮 agent run。
+      messages.push(next);
       emit("message", next);
       emit("turn_end", { turn: turn, stop: "message" });
       return next;
@@ -106,12 +115,19 @@ export function createAgent(options) {
       role: "assistant",
       content: "Agent stopped after maxTurns=" + String(maxTurns),
     };
+    messages.push(fallback);
     emit("message", fallback);
     return fallback;
   }
 
+  // 一次性任务入口保持原有语义：每次调用都从新的上下文开始。
+  function run(input) {
+    return runMessages([], input);
+  }
+
   return {
     run: run,
+    runMessages: runMessages,
   };
 }
 
