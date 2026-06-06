@@ -69,8 +69,18 @@ function normalizeStatus(status) {
   if (!status) {
     return "open";
   }
-  if (status === "open" || status === "done") {
-    return status;
+  let value = String(status).trim().toLowerCase();
+  if (value === "open" || value === "todo" || value === "pending" || value === "doing" || value === "in_progress" || value === "in-progress") {
+    return "open";
+  }
+  if (value === "done" || value === "complete" || value === "completed" || value === "closed") {
+    return "done";
+  }
+  if (value === "待办" || value === "未完成" || value === "进行中") {
+    return "open";
+  }
+  if (value === "完成" || value === "已完成" || value === "结束") {
+    return "done";
   }
   throw new TypeError("todo status must be open or done");
 }

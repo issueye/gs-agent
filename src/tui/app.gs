@@ -1,6 +1,7 @@
-import { loadAgentApp, readTaskText, runAgentTurn, writeTaskText } from "@/agent/app";
+import { applyAgentSession, loadAgentApp, readTaskText, runAgentTurn, writeTaskText } from "@/agent/app";
 import { createRunLogger, eventLogFields } from "@/agent/log";
 import { createJSONLSession } from "@/agent/session/jsonl";
+import { createAgentSession, readCurrentAgentSession, writeCurrentAgentSession } from "@/agent/session/manager";
 import { charWidth, chars } from "@/tui/ansi";
 import { commandItems, toggleUiLanguage, tr } from "@/tui/i18n";
 import { renderComposerFrame, renderContentFrame } from "@/tui/renderer";
@@ -143,6 +144,15 @@ function appendAnswerEvent(state) {
 function loadRecentSession(state) {
   state.events = [];
   invalidateTranscript(state);
+  let current = readCurrentAgentSession(state.app.root);
+  if (!current) {
+    state.messages = [];
+    state.answer = "";
+    state.detailScroll = 0;
+    state.error = tr(state, "noRecentSession");
+    return;
+  }
+  applyAgentSession(state.app, current);
   let session = createJSONLSession(state.app.sessionFile);
   if (fs.existsSync(state.app.sessionFile)) {
     state.events = session.readAll();
@@ -174,22 +184,15 @@ function resetConversationState(state) {
   invalidateTranscript(state);
 }
 
-function removeFileIfExists(file) {
-  if (!file) {
-    return;
-  }
-  if (fs.existsSync(file)) {
-    fs.unlinkSync(file);
-  }
-}
-
 export function startNewSession(state) {
+  let session = createAgentSession(state.app.root);
+  applyAgentSession(state.app, session);
+  writeCurrentAgentSession(state.app.root, session);
   resetConversationState(state);
-  removeFileIfExists(state.app.sessionFile);
-  removeFileIfExists(state.app.sessionArchiveFile);
-  removeFileIfExists(state.app.answerFile);
   state.error = tr(state, "newSession");
   state.logger.info("new session started", {
+    sessionId: state.app.sessionId,
+    sessionDir: state.app.sessionDir,
     sessionFile: state.app.sessionFile,
     sessionArchiveFile: state.app.sessionArchiveFile,
     answerFile: state.app.answerFile,

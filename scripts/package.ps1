@@ -41,8 +41,11 @@ if (!$SkipSmoke) {
   & $GsExe --timeout 20s anthropic-retry-smoke-test.gs
   & $GsExe --timeout 20s llm-body-log-smoke-test.gs
   & $GsExe --timeout 20s todo-tool-smoke-test.gs
+  & $GsExe --timeout 20s todo-status-smoke-test.gs
   & $GsExe --timeout 20s tool-result-sanitize-smoke-test.gs
   & $GsExe --timeout 20s dynamic-tool-smoke-test.gs
+  & $GsExe --timeout 20s session-manager-smoke-test.gs
+  & $GsExe --timeout 20s session-rotation-smoke-test.gs
   & $GsExe --timeout 20s tui-smoke-test.gs
   & $GsExe --timeout 20s framework-smoke-test.gs
   & $GsExe --timeout 20s markdown-stdlib-smoke-test.gs

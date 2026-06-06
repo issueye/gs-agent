@@ -57,8 +57,8 @@ thinking = "disabled"
 E:\codes\gts\dist\gs.exe --timeout 60s run
 ```
 
-运行后会生成 `.agent/session.jsonl`。
-最终回答会同时保存到 `.agent/answer.md`。
+运行后会在 `.agent/sessions/<session-id>/` 下生成独立的 `session.jsonl`、`session.messages.jsonl` 和 `answer.md`，不会覆盖旧会话。
+最近一次会话位置会记录到 `.agent/current-session.json`。
 运行日志会写入 `.agent/logs/gs-agent.log`，最近一次启动/运行的日志会写入 `.agent/logs/latest.log`。
 
 运行 TUI：
@@ -107,7 +107,7 @@ TUI 快捷键：
 
 Git Bash/mintty 下默认只启用滚轮鼠标事件，不启用拖拽 mouse tracking，避免拦截终端原生文本选择。需要选择内容时可以直接拖拽；如果终端仍拦截选择，按住 `Shift` 再拖拽通常会强制使用终端选择模式。
 
-TUI 启动时会自动加载最近的 `.agent/session.jsonl` 和 `.agent/answer.md`。运行结束后最终答案会作为 `answer` 事件出现在时间线里。
+TUI 启动时会创建新的独立会话；使用 `Ctrl+O` 可加载 `.agent/current-session.json` 指向的最近会话。运行结束后最终答案会作为 `answer` 事件出现在时间线里。
 TUI 状态栏会显示 `log=.agent/logs/latest.log`，排查异常时优先查看这个文件；完整历史保留在 `.agent/logs/gs-agent.log`。
 
 ## TUI 测试程序

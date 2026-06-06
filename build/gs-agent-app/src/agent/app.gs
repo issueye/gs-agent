@@ -1,6 +1,7 @@
 import { createCodingAgent } from "@/agent/core/kit";
 import { createProvider } from "@/agent/llm/providers";
 import { createRunLogger, eventLogFields, logPaths } from "@/agent/log";
+import { createAgentSession, readCurrentAgentSession, writeCurrentAgentSession } from "@/agent/session/manager";
 import { createWorkspaceTools } from "@/agent/tools/workspace";
 
 let fs = require("@std/fs");
@@ -135,6 +136,31 @@ function contextTokenThreshold(config, agent) {
   return undefined;
 }
 
+export function applyAgentSession(app, session) {
+  app.sessionId = session.sessionId;
+  app.sessionDir = session.sessionDir;
+  app.sessionFile = session.sessionFile;
+  app.sessionArchiveFile = session.sessionArchiveFile;
+  app.answerFile = session.answerFile;
+  return app;
+}
+
+export function startAgentSession(app) {
+  let session = createAgentSession(app.root);
+  applyAgentSession(app, session);
+  writeCurrentAgentSession(app.root, session);
+  return session;
+}
+
+export function loadCurrentAgentSession(app) {
+  let session = readCurrentAgentSession(app.root);
+  if (!session) {
+    return undefined;
+  }
+  applyAgentSession(app, session);
+  return session;
+}
+
 function createAppKit(app, logger, onEvent) {
   app.agent.requestBodyLogFile = app.llmBodyLogFile;
   return createCodingAgent({
@@ -211,9 +237,10 @@ export function loadAgentApp(root) {
   let config = readConfig(root);
   let agent = agentConfig(config);
   let workspace = path.join(root, "workspace");
-  let sessionFile = path.join(root, ".agent", "session.jsonl");
-  let sessionArchiveFile = path.join(root, ".agent", "session.messages.jsonl");
-  let answerFile = path.join(root, ".agent", "answer.md");
+  let session = readCurrentAgentSession(root);
+  if (!session) {
+    session = createAgentSession(root);
+  }
   let logs = logPaths(root);
 
   return {
@@ -222,9 +249,11 @@ export function loadAgentApp(root) {
     agent: agent,
     workspace: workspace,
     taskFile: agent.taskFile,
-    sessionFile: sessionFile,
-    sessionArchiveFile: sessionArchiveFile,
-    answerFile: answerFile,
+    sessionId: session.sessionId,
+    sessionDir: session.sessionDir,
+    sessionFile: session.sessionFile,
+    sessionArchiveFile: session.sessionArchiveFile,
+    answerFile: session.answerFile,
     logFile: logs.file,
     latestLogFile: logs.latest,
     llmBodyLogFile: logs.llmBody,
@@ -242,14 +271,8 @@ export function runAgentTask(options) {
     logger = createRunLogger(app.root, "agent");
   }
 
-  let sessionFile = app.sessionFile;
-  // 每次运行生成一份新的 session，避免旧事件干扰本次排查。
-  if (fs.existsSync(sessionFile)) {
-    fs.unlinkSync(sessionFile);
-  }
-  if (app.sessionArchiveFile && fs.existsSync(app.sessionArchiveFile)) {
-    fs.unlinkSync(app.sessionArchiveFile);
-  }
+  let session = startAgentSession(app);
+  let sessionFile = session.sessionFile;
 
   let info = modelInfo(app);
   logger.info("agent run started", {
@@ -282,6 +305,8 @@ export function runAgentTask(options) {
 
     return {
       answer: answer.content,
+      sessionId: app.sessionId,
+      sessionDir: app.sessionDir,
       events: records.length,
       sessionFile: sessionFile,
       sessionArchiveFile: app.sessionArchiveFile,
@@ -319,6 +344,10 @@ export function runAgentTurn(options) {
     messages = [];
   }
 
+  if (!app.sessionId || !app.sessionFile) {
+    startAgentSession(app);
+  }
+
   let info = modelInfo(app);
   logger.info("agent turn started", {
     root: app.root,
@@ -351,6 +380,8 @@ export function runAgentTurn(options) {
     return {
       answer: answer.content,
       messages: messages,
+      sessionId: app.sessionId,
+      sessionDir: app.sessionDir,
       events: records.length,
       sessionFile: app.sessionFile,
       sessionArchiveFile: app.sessionArchiveFile,
