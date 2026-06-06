@@ -141,7 +141,17 @@ function createAppKit(app, logger, onEvent) {
     cwd: app.root,
     includeCodingTools: app.agent.includeCodingTools,
     enabledTools: app.agent.tools,
-    provider: createProvider(app.config, app.agent),
+    provider: createProvider(app.config, app.agent, {
+      onRetry: function(event) {
+        logger.warn("llm retry", event);
+        if (onEvent) {
+          onEvent({
+            kind: "llm_retry",
+            payload: event,
+          });
+        }
+      },
+    }),
     tools: createWorkspaceTools(app.workspace),
     sessionFile: app.sessionFile,
     sessionArchiveFile: app.sessionArchiveFile,

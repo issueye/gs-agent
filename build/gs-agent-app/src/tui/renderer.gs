@@ -1,9 +1,8 @@
 import { INVERSE, RESET, chars, color, line, padRight, repeatText, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
-import { estimateContextTokens } from "@/agent/core/context";
-import { compactLoading, loadingFrame } from "@/tui/loading";
+import { loadingFrame } from "@/tui/loading";
 import { commandItems, tr } from "@/tui/i18n";
 import { Input, Markdown } from "@/tui/components";
-import { banner, border, clampScroll, joinColumns, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
+import { border, clampScroll, splitLines, takeLine, wrapText } from "@/tui/widgets";
 
 function safeText(value) {
   if (!value) {
@@ -105,61 +104,6 @@ function toolResultDot(content) {
   return color("●", "muted");
 }
 
-function welcomePanel(state, width) {
-  let model = "unknown";
-  if (state.app.config.llm) {
-    if (state.app.config.llm.anthropic) {
-      if (state.app.config.llm.anthropic.model) {
-        model = state.app.config.llm.anthropic.model;
-      }
-    }
-  }
-  let root = safeText(state.app.root);
-  if (root === "") {
-    root = ".";
-  }
-
-  let title = " gs-agent ";
-  let version = " TUI ";
-  let inner = width - 4;
-  if (inner < 20) {
-    inner = 20;
-  }
-  let topFill = width - visibleWidth(title) - visibleWidth(version) - 2;
-  if (topFill < 0) {
-    topFill = 0;
-  }
-  let top = "┌" + styleText(title, { bold: true, fg: "warning" }) + repeatText("─", topFill) + styleText(version, { dim: true, fg: "muted" }) + "┐";
-  let index = 0;
-  if (state.tick) {
-    index = state.tick % 4;
-  }
-  let eyes = "■■";
-  if (index === 1) {
-    eyes = "━━";
-  } else if (index === 2) {
-    eyes = "●●";
-  }
-  let tail = "╲";
-  if (index === 3) {
-    tail = "╱";
-  }
-  let pet = [
-    "  /\\_/\\   " + tail,
-    " ( " + eyes + " )  ",
-    " /|___|\\  ",
-    "  /   \\   ",
-  ];
-  let rows = [];
-  rows.push(line(top, width));
-  rows.push(color("│", "warning") + styleText(line(pet[0], 13), { bold: true, fg: "warning" }) + line(" model=" + model, inner - 13) + color("│", "warning"));
-  rows.push(color("│", "warning") + styleText(line(pet[1], 13), { bold: true, fg: "warning" }) + line(" project=" + root, inner - 13) + color("│", "warning"));
-  rows.push(color("│", "warning") + styleText(line(pet[2], 13), { bold: true, fg: "warning" }) + line(" " + tr(state, "enterSend") + "  " + tr(state, "loadSession") + "  Tab " + tr(state, "focus"), inner - 13) + color("│", "warning"));
-  rows.push(color("│", "warning") + styleText(line(pet[3], 13), { bold: true, fg: "warning" }) + line("", inner - 13) + color("│", "warning"));
-  rows.push(line(color("└" + repeatText("─", width - 2) + "┘", "warning"), width));
-  return rows;
-}
-
 function eventTitle(state, event) {
   if (!event) {
     return tr(state, "noEvent");
@@ -188,6 +132,9 @@ function eventTitle(state, event) {
   if (kind === "answer") {
     return "answer";
   }
+  if (kind === "llm_retry") {
+    return "llm_retry";
+  }
   return safeText(kind);
 }
 
@@ -213,6 +160,9 @@ export function eventSummary(event) {
   if (event.kind === "answer") {
     return title + " - " + safeText(payload.content).split("\n")[0];
   }
+  if (event.kind === "llm_retry") {
+    return "llm_retry " + String(payload.attempt) + "/" + String(payload.maxAttempts) + " " + safeText(payload.error);
+  }
   return title;
 }
 
@@ -224,120 +174,6 @@ export function eventDetails(state, event) {
     return safeText(event.payload.content);
   }
   return JSON.stringify(event, null, 2);
-}
-
-function configLabel(state) {
-  let agent = state.app.agent;
-  let tools = agent.tools;
-  let toolCount = 0;
-  if (tools) {
-    toolCount = tools.length;
-  }
-  let model = "unknown";
-  if (state.app.config.llm) {
-    if (state.app.config.llm.anthropic) {
-      if (state.app.config.llm.anthropic.model) {
-        model = state.app.config.llm.anthropic.model;
-      }
-    }
-  }
-  return "gs-agent  provider=" + agent.provider + "  model=" + model + "  maxTurns=" + String(agent.maxTurns) + "  tools=" + String(toolCount);
-}
-
-function contextThreshold(state) {
-  if (state.app.agent) {
-    if (state.app.agent.contextTokenThreshold) {
-      return state.app.agent.contextTokenThreshold;
-    }
-  }
-  if (state.app.config) {
-    if (state.app.config.llm) {
-      if (state.app.config.llm.anthropic) {
-        if (state.app.config.llm.anthropic.contextTokenThreshold) {
-          return state.app.config.llm.anthropic.contextTokenThreshold;
-        }
-      }
-    }
-  }
-  return undefined;
-}
-
-function compactNumber(value) {
-  if (value >= 1000000) {
-    return String(Math.round(value / 100000) / 10) + "m";
-  }
-  if (value >= 1000) {
-    return String(Math.round(value / 100) / 10) + "k";
-  }
-  return String(value);
-}
-
-function contextUsageText(state) {
-  let threshold = contextThreshold(state);
-  if (!threshold) {
-    return "";
-  }
-  let used = estimateContextTokens(state.messages || []);
-  let percent = 0;
-  if (threshold > 0) {
-    percent = Math.floor(used * 1000 / threshold) / 10;
-  }
-  return "  ctx=" + compactNumber(used) + "/" + compactNumber(threshold) + " " + String(percent) + "%";
-}
-
-function statusText(state) {
-  let run = tr(state, "idle");
-  if (state.running) {
-    if (state.cancelRequested) {
-      run = compactLoading(true, state.tick, tr(state, "cancelling"));
-    } else {
-      run = compactLoading(true, state.tick, tr(state, "running"));
-    }
-  }
-  let dirty = "";
-  if (state.dirty) {
-    dirty = " " + tr(state, "modified");
-  }
-  let error = "";
-  if (state.error) {
-    error = "  " + tr(state, "error") + "=" + state.error;
-  }
-  let answer = "";
-  if (state.answer) {
-    answer = "  " + tr(state, "answerReady");
-  }
-  let log = "";
-  if (state.app.latestLogFile) {
-    log = "  " + tr(state, "log") + "=.agent/logs/latest.log";
-  }
-  let messages = "";
-  if (state.messages) {
-    messages = "  " + tr(state, "messages") + "=" + String(state.messages.length);
-  }
-  return run + dirty + "  events=" + String(state.events.length) + messages + contextUsageText(state) + answer + error + log;
-}
-
-function drawTask(state, width, height) {
-  let out = [];
-  out.push(styleText(tr(state, "task"), { bold: true, fg: "accent" }) + " " + styleText(state.app.taskFile, { dim: true, fg: "muted" }));
-  let lines = splitLines(state.taskText);
-  let bodyHeight = height - 1;
-  let offset = state.taskScroll;
-
-  for (let i = 0; i < bodyHeight; i = i + 1) {
-    let prefix = "  ";
-    let text = takeLine(lines, offset + i);
-    if (state.focus === "task" && offset + i === state.cursorLine) {
-      prefix = "* ";
-    }
-    out.push(prefix + text);
-  }
-  while (out.length < height) {
-    out.push("");
-  }
-  return addScrollbar(out.map(function(item) {
-    return line(item, width);
-  }), width, 1, state.taskScroll, splitLines(state.taskText).length);
 }
 
 function drawComposer(state, width, height) {
@@ -588,6 +424,18 @@ function transcriptRows(state, width) {
       continue;
     }
 
+    if (event.kind === "llm_retry") {
+      let text = "model retry " + String(payload.attempt) + "/" + String(payload.maxAttempts);
+      if (payload.delayMs) {
+        text = text + " after " + String(payload.delayMs) + "ms";
+      }
+      if (payload.error) {
+        text = text + ": " + safeText(payload.error);
+      }
+      pushWrappedWithPrefix(out, "~ ", text, width, { bold: true, fg: "warning" });
+      continue;
+    }
+
     if (event.kind === "answer") {
       let answerText = displayText(payload.content);
       if (lastAssistantText !== "" && answerText === lastAssistantText) {
@@ -649,66 +497,6 @@ function drawTranscript(state, width, height) {
   });
 }
 
-function drawTimeline(state, width, height) {
-  let out = [];
-  out.push(styleText(tr(state, "timeline"), { bold: true, fg: "accent" }));
-  let bodyHeight = height - 1;
-  let offset = state.eventScroll;
-
-  for (let i = 0; i < bodyHeight; i = i + 1) {
-    let index = offset + i;
-    let text = "";
-    if (index < state.events.length) {
-      text = eventSummary(state.events[index]);
-    }
-    if (index === state.selectedEvent && state.focus === "timeline") {
-      text = INVERSE + padRight(truncateToWidth(text, width), width) + RESET;
-    }
-    out.push(text);
-  }
-  while (out.length < height) {
-    out.push("");
-  }
-  return addScrollbar(renderLines(out, width, height), width, 1, state.eventScroll, state.events.length);
-}
-
-function drawDetails(state, width, height) {
-  let event = undefined;
-  if (state.selectedEvent >= 0 && state.selectedEvent < state.events.length) {
-    event = state.events[state.selectedEvent];
-  }
-  let text = eventDetails(state, event);
-  if (!event) {
-    if (state.answer) {
-      text = state.answer;
-    }
-  }
-  let bodyHeight = height - 1;
-  if (bodyHeight < 1) {
-    bodyHeight = 1;
-  }
-  let lines = Markdown({
-    width: width - 1,
-    text: text,
-  });
-  let maxScroll = lines.length - bodyHeight;
-  if (maxScroll < 0) {
-    maxScroll = 0;
-  }
-  let detailScroll = clampScroll(state.detailScroll, maxScroll);
-  let out = [];
-  out.push(styleText(scrollTitle(tr(state, "details"), detailScroll, bodyHeight, lines.length), { bold: true, fg: "accent" }));
-  for (let i = 0; i < bodyHeight; i = i + 1) {
-    out.push(takeLine(lines, detailScroll + i));
-  }
-  while (out.length < height) {
-    out.push("");
-  }
-  return addScrollbar(out.map(function(item) {
-    return line(item, width);
-  }), width, 1, detailScroll, lines.length);
-}
-
 function addScrollbar(rows, width, headerRows, offset, total) {
   if (width < 4 || rows.length <= headerRows) {
     return rows;
@@ -750,6 +538,68 @@ function addScrollbar(rows, width, headerRows, offset, total) {
   return out;
 }
 
+function petRows(state, width) {
+  let tick = state.tick || 0;
+  let eyes = "oo";
+  if (tick % 10 === 4) {
+    eyes = "--";
+  }
+  let tail = "/";
+  if (tick % 6 >= 3) {
+    tail = "\\";
+  }
+  let status = tr(state, "idle");
+  if (state.running) {
+    status = tr(state, "running");
+    if (state.cancelRequested) {
+      status = tr(state, "cancelling");
+    }
+  }
+  let retry = "";
+  if (state.events) {
+    for (let i = state.events.length - 1; i >= 0; i = i - 1) {
+      let event = state.events[i];
+      if (event.kind === "llm_retry") {
+        retry = "  retry=" + String(event.payload.attempt) + "/" + String(event.payload.maxAttempts);
+        break;
+      }
+      if (event.kind === "message" || event.kind === "answer" || event.kind === "error") {
+        break;
+      }
+    }
+  }
+  let messages = 0;
+  if (state.messages) {
+    messages = state.messages.length;
+  }
+  let title = " gs-agent ";
+  let topFill = width - visibleWidth(title) - 2;
+  if (topFill < 0) {
+    topFill = 0;
+  }
+  let top = color("┌", "warning") + styleText(title, { bold: true, fg: "warning" }) + color(repeatText("─", topFill) + "┐", "warning");
+  let pet = [
+    " /\\_/\\ " + tail,
+    "( " + eyes + " )",
+  ];
+  let info = "status=" + status + "  messages=" + String(messages) + "  events=" + String(state.events.length) + retry;
+  let hint = tr(state, "enterSend") + "  / commands";
+  let inner = width - 2;
+  if (inner < 1) {
+    inner = 1;
+  }
+  return [
+    line(top, width),
+    color("│", "warning") + styleText(line(pet[0], 10), { bold: true, fg: "warning" }) + line(info, inner - 10) + color("│", "warning"),
+    color("│", "warning") + styleText(line(pet[1], 10), { bold: true, fg: "warning" }) + styleText(line(hint, inner - 10), { dim: true, fg: "muted" }) + color("│", "warning"),
+    line(color("└" + repeatText("─", width - 2) + "┘", "warning"), width),
+  ];
+}
+
+function headerHeight(state) {
+  return 4;
+}
+
 function viewportSize(state) {
   let cols = state.cols;
   let rows = state.rows;
@@ -772,6 +622,8 @@ export function renderContentFrame(state) {
   let size = viewportSize(state);
   let cols = size.cols;
   let rows = size.rows;
+  let headerRows = petRows(state, cols);
+  let fixedHeaderHeight = headerHeight(state);
   let hasContentRows = "contentRows" in state;
   if (hasContentRows) {
     rows = state.contentRows;
@@ -789,13 +641,16 @@ export function renderContentFrame(state) {
   if (!hasContentRows) {
     transcriptHeight = rows - composerHeight;
   }
-  transcriptHeight = transcriptHeight - commandHeight;
+  transcriptHeight = transcriptHeight - commandHeight - fixedHeaderHeight;
   if (transcriptHeight < 1) {
     transcriptHeight = 1;
   }
   let transcript = drawTranscript(state, cols, transcriptHeight);
 
   let lines = [];
+  for (let row of headerRows) {
+    lines.push(row);
+  }
   let detailsStart = lines.length + 1;
   for (let row of transcript) {
     lines.push(row);

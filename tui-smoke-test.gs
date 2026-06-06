@@ -165,11 +165,12 @@ for (let i = 0; i < baseFrameLines.length; i = i + 1) {
   }
 }
 assert(promptLineIndex >= state.rows - 6, "composer fixed at bottom");
-assert(!frame.includes("/\\_/\\"), "no fixed header in scrollback");
+assert(frame.includes("/\\_/\\"), "fixed pixel pet header rendered");
+assert(frame.includes("status=idle"), "pet header status rendered");
 let tickState = copyState(state);
 tickState.tick = 2;
 let tickFrame = renderFrame(tickState);
-assert(tickFrame === frame, "no fixed animated header");
+assert(tickFrame.includes("/\\_/\\"), "animated pet header remains rendered");
 assert(frame.includes("read_file"), "tool event");
 let cleanFrame = stripAnsi(frame);
 assert(cleanFrame.includes("● Tool(read_file)"), "tool call uses round status marker");
@@ -180,6 +181,22 @@ assert(frame.includes("Enter newline"), "enter newline hint");
 assert(frame.includes("Ctrl+C to quit"), "composer bottom hint");
 assert(frame.includes("读取 README.md 并总结"), "zh render");
 assert(frame.includes("最终答案"), "answer render");
+let retryState = copyState(state);
+retryState.events = [
+  {
+    kind: "llm_retry",
+    payload: {
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 500,
+      error: "Anthropic request failed: 500 server error",
+    },
+  },
+];
+retryState.transcriptCache = null;
+retryState.transcriptMeasureCache = null;
+let retryFrame = renderFrame(retryState);
+assert(stripAnsi(retryFrame).includes("model retry 1/3 after 500ms"), "llm retry event rendered");
 let markdownState = copyState(state);
 markdownState.events = [
   {

@@ -2,6 +2,7 @@ import { messagesUrl } from "@/agent/llm/anthropic-url";
 import { appendJsonLog } from "@/agent/log";
 
 let http = require("@std/net/http/client");
+let timers = require("@std/timers");
 
 // Anthropic 消息 content 可以是字符串或结构化块；工具结果统一转成文本。
 function asTextContent(content) {
@@ -136,6 +137,81 @@ function logRequestBody(options, url, body) {
   });
 }
 
+function retryCount(options) {
+  let value = options.retryCount;
+  if (value === undefined) {
+    value = options.retries;
+  }
+  if (value === undefined) {
+    value = 3;
+  }
+  if (value < 1) {
+    return 1;
+  }
+  return Math.floor(value);
+}
+
+function retryDelayMs(options) {
+  let value = options.retryDelayMs;
+  if (value === undefined) {
+    value = 500;
+  }
+  if (value < 0) {
+    return 0;
+  }
+  return value;
+}
+
+function retryBackoffMs(options, attempt) {
+  let delay = retryDelayMs(options);
+  if (delay <= 0) {
+    return 0;
+  }
+  let factor = 1;
+  for (let i = 1; i < attempt; i = i + 1) {
+    factor = factor * 2;
+  }
+  return delay * factor;
+}
+
+export function isRetryableAnthropicError(err) {
+  let text = String(err || "").toLowerCase();
+  if (text.includes("empty body") || text.includes("invalid json")) {
+    return true;
+  }
+  if (text.includes("timeout") || text.includes("timed out") || text.includes("econnreset") || text.includes("socket") || text.includes("network")) {
+    return true;
+  }
+  if (text.includes("anthropic request failed: 429")) {
+    return true;
+  }
+  if (text.includes("anthropic request failed: 5")) {
+    return true;
+  }
+  return false;
+}
+
+function logRetry(options, url, attempt, maxAttempts, err, delayMs) {
+  let event = {
+    attempt: attempt,
+    maxAttempts: maxAttempts,
+    delayMs: delayMs,
+    error: String(err),
+  };
+  if (options.onRetry) {
+    options.onRetry(event);
+  }
+  if (!options.requestBodyLogFile) {
+    return;
+  }
+  appendJsonLog(options.requestBodyLogFile, {
+    time: (new Date()).toISOString(),
+    provider: "anthropic",
+    url: url,
+    retry: event,
+  });
+}
+
 export function parseAnthropicPayload(response) {
   let body = String(response.body || "");
   if (body.trim() === "") {
@@ -184,20 +260,33 @@ export function createAnthropicProvider(options) {
     return parseAnthropicPayload(response);
   }
 
+  function requestWithRetry(body, url) {
+    let maxAttempts = retryCount(options);
+    let lastErr = undefined;
+    for (let attempt = 1; attempt <= maxAttempts; attempt = attempt + 1) {
+      try {
+        return requestOnce(body, url);
+      } catch (err) {
+        lastErr = err;
+        if (attempt >= maxAttempts || !isRetryableAnthropicError(err)) {
+          throw err;
+        }
+        let delay = retryBackoffMs(options, attempt);
+        logRetry(options, url, attempt, maxAttempts, err, delay);
+        if (delay > 0) {
+          timers.sleep(delay);
+        }
+      }
+    }
+    throw lastErr;
+  }
+
   function next(messages, tools, turnOptions) {
     let body = anthropicRequestBody(options, messages, tools, turnOptions);
     let url = messagesUrl(baseUrl);
     logRequestBody(options, url, body);
 
-    let payload = undefined;
-    try {
-      payload = requestOnce(body, url);
-    } catch (err) {
-      if (!String(err).includes("empty body")) {
-        throw err;
-      }
-      payload = requestOnce(body, url);
-    }
+    let payload = requestWithRetry(body, url);
     let toolUse = firstToolUse(payload.content);
     if (toolUse) {
       return {

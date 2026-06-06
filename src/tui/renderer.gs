@@ -132,6 +132,9 @@ function eventTitle(state, event) {
   if (kind === "answer") {
     return "answer";
   }
+  if (kind === "llm_retry") {
+    return "llm_retry";
+  }
   return safeText(kind);
 }
 
@@ -156,6 +159,9 @@ export function eventSummary(event) {
   }
   if (event.kind === "answer") {
     return title + " - " + safeText(payload.content).split("\n")[0];
+  }
+  if (event.kind === "llm_retry") {
+    return "llm_retry " + String(payload.attempt) + "/" + String(payload.maxAttempts) + " " + safeText(payload.error);
   }
   return title;
 }
@@ -418,6 +424,18 @@ function transcriptRows(state, width) {
       continue;
     }
 
+    if (event.kind === "llm_retry") {
+      let text = "model retry " + String(payload.attempt) + "/" + String(payload.maxAttempts);
+      if (payload.delayMs) {
+        text = text + " after " + String(payload.delayMs) + "ms";
+      }
+      if (payload.error) {
+        text = text + ": " + safeText(payload.error);
+      }
+      pushWrappedWithPrefix(out, "~ ", text, width, { bold: true, fg: "warning" });
+      continue;
+    }
+
     if (event.kind === "answer") {
       let answerText = displayText(payload.content);
       if (lastAssistantText !== "" && answerText === lastAssistantText) {
@@ -520,6 +538,68 @@ function addScrollbar(rows, width, headerRows, offset, total) {
   return out;
 }
 
+function petRows(state, width) {
+  let tick = state.tick || 0;
+  let eyes = "oo";
+  if (tick % 10 === 4) {
+    eyes = "--";
+  }
+  let tail = "/";
+  if (tick % 6 >= 3) {
+    tail = "\\";
+  }
+  let status = tr(state, "idle");
+  if (state.running) {
+    status = tr(state, "running");
+    if (state.cancelRequested) {
+      status = tr(state, "cancelling");
+    }
+  }
+  let retry = "";
+  if (state.events) {
+    for (let i = state.events.length - 1; i >= 0; i = i - 1) {
+      let event = state.events[i];
+      if (event.kind === "llm_retry") {
+        retry = "  retry=" + String(event.payload.attempt) + "/" + String(event.payload.maxAttempts);
+        break;
+      }
+      if (event.kind === "message" || event.kind === "answer" || event.kind === "error") {
+        break;
+      }
+    }
+  }
+  let messages = 0;
+  if (state.messages) {
+    messages = state.messages.length;
+  }
+  let title = " gs-agent ";
+  let topFill = width - visibleWidth(title) - 2;
+  if (topFill < 0) {
+    topFill = 0;
+  }
+  let top = color("┌", "warning") + styleText(title, { bold: true, fg: "warning" }) + color(repeatText("─", topFill) + "┐", "warning");
+  let pet = [
+    " /\\_/\\ " + tail,
+    "( " + eyes + " )",
+  ];
+  let info = "status=" + status + "  messages=" + String(messages) + "  events=" + String(state.events.length) + retry;
+  let hint = tr(state, "enterSend") + "  / commands";
+  let inner = width - 2;
+  if (inner < 1) {
+    inner = 1;
+  }
+  return [
+    line(top, width),
+    color("│", "warning") + styleText(line(pet[0], 10), { bold: true, fg: "warning" }) + line(info, inner - 10) + color("│", "warning"),
+    color("│", "warning") + styleText(line(pet[1], 10), { bold: true, fg: "warning" }) + styleText(line(hint, inner - 10), { dim: true, fg: "muted" }) + color("│", "warning"),
+    line(color("└" + repeatText("─", width - 2) + "┘", "warning"), width),
+  ];
+}
+
+function headerHeight(state) {
+  return 4;
+}
+
 function viewportSize(state) {
   let cols = state.cols;
   let rows = state.rows;
@@ -542,6 +622,8 @@ export function renderContentFrame(state) {
   let size = viewportSize(state);
   let cols = size.cols;
   let rows = size.rows;
+  let headerRows = petRows(state, cols);
+  let fixedHeaderHeight = headerHeight(state);
   let hasContentRows = "contentRows" in state;
   if (hasContentRows) {
     rows = state.contentRows;
@@ -559,13 +641,16 @@ export function renderContentFrame(state) {
   if (!hasContentRows) {
     transcriptHeight = rows - composerHeight;
   }
-  transcriptHeight = transcriptHeight - commandHeight;
+  transcriptHeight = transcriptHeight - commandHeight - fixedHeaderHeight;
   if (transcriptHeight < 1) {
     transcriptHeight = 1;
   }
   let transcript = drawTranscript(state, cols, transcriptHeight);
 
   let lines = [];
+  for (let row of headerRows) {
+    lines.push(row);
+  }
   let detailsStart = lines.length + 1;
   for (let row of transcript) {
     lines.push(row);

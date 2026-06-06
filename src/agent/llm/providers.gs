@@ -2,9 +2,14 @@ import { createScriptedProvider } from "@/agent/llm/fake";
 import { createAnthropicProvider } from "@/agent/llm/anthropic";
 
 // Provider factory：应用层只关心 provider 名称，不直接依赖具体模型实现。
-export function createProvider(config, agent) {
+export function createProvider(config, agent, options) {
+  if (!options) {
+    options = {};
+  }
   if (agent.provider === "anthropic") {
-    return createAnthropicProvider(anthropicOptions(config, agent));
+    let anthropic = anthropicOptions(config, agent);
+    anthropic.onRetry = options.onRetry;
+    return createAnthropicProvider(anthropic);
   }
 
   if (agent.provider === "fake") {

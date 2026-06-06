@@ -44,7 +44,7 @@ function defaultAppRoot() {
 function defaultAgentConfig() {
   return {
     provider: "anthropic",
-    system: "You are a concise coding agent. Use tools when useful. Complete the user's requested task and stop when you have a final answer.",
+    system: "You are a concise coding agent. Before acting, analyze the user's request, identify the concrete tasks needed, and state or maintain a brief task plan. Then work through the tasks in order, using tools when useful. Complete the user's requested task and stop when you have a final answer.",
     maxTurns: 10,
     includeCodingTools: true,
     tools: ["read_file", "list_dir", "grep", "todo"],
@@ -141,7 +141,17 @@ function createAppKit(app, logger, onEvent) {
     cwd: app.root,
     includeCodingTools: app.agent.includeCodingTools,
     enabledTools: app.agent.tools,
-    provider: createProvider(app.config, app.agent),
+    provider: createProvider(app.config, app.agent, {
+      onRetry: function(event) {
+        logger.warn("llm retry", event);
+        if (onEvent) {
+          onEvent({
+            kind: "llm_retry",
+            payload: event,
+          });
+        }
+      },
+    }),
     tools: createWorkspaceTools(app.workspace),
     sessionFile: app.sessionFile,
     sessionArchiveFile: app.sessionArchiveFile,

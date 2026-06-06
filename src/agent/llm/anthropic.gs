@@ -192,6 +192,15 @@ export function isRetryableAnthropicError(err) {
 }
 
 function logRetry(options, url, attempt, maxAttempts, err, delayMs) {
+  let event = {
+    attempt: attempt,
+    maxAttempts: maxAttempts,
+    delayMs: delayMs,
+    error: String(err),
+  };
+  if (options.onRetry) {
+    options.onRetry(event);
+  }
   if (!options.requestBodyLogFile) {
     return;
   }
@@ -199,12 +208,7 @@ function logRetry(options, url, attempt, maxAttempts, err, delayMs) {
     time: (new Date()).toISOString(),
     provider: "anthropic",
     url: url,
-    retry: {
-      attempt: attempt,
-      maxAttempts: maxAttempts,
-      delayMs: delayMs,
-      error: String(err),
-    },
+    retry: event,
   });
 }
 
