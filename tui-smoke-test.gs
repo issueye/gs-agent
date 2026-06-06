@@ -16,13 +16,13 @@ function assert(cond, message) {
   }
 }
 
-let keys = parseKeys("\x12\x13\x1b[A\x1b[Fa");
+let keys = parseKeys("\x12\x13\x1b[A\x1b[F/");
 assert(keys.length === 5, "key count");
 assert(keys[0].id === "ctrl+r", "ctrl+r");
 assert(keys[1].id === "ctrl+s", "ctrl+s");
 assert(keys[2].id === "up", "up");
 assert(keys[3].id === "end", "end");
-assert(keys[4].text === "a", "text");
+assert(keys[4].text === "/", "slash text");
 let zhKeys = parseKeys("你好");
 assert(zhKeys.length === 2, "zh key count");
 assert(zhKeys[0].text === "你", "zh first");
@@ -93,6 +93,9 @@ let state = {
   detailScroll: 0,
   answer: "最终答案",
   error: "",
+  commandOpen: false,
+  commandQuery: "",
+  commandSelected: 0,
   messages: [
     {
       role: "user",
@@ -123,6 +126,9 @@ function copyState(base) {
     detailScroll: base.detailScroll,
     answer: base.answer,
     error: base.error,
+    commandOpen: base.commandOpen,
+    commandQuery: base.commandQuery,
+    commandSelected: base.commandSelected,
     messages: base.messages,
     transcriptCache: null,
     transcriptMeasureCache: null,
@@ -181,6 +187,16 @@ runningState.running = true;
 runningState.tick = 2;
 let runningComposer = renderComposerFrame(runningState);
 assert(stripAnsi(runningComposer).includes("| running"), "composer loading animation");
+
+let commandState = copyState(state);
+commandState.commandOpen = true;
+commandState.commandQuery = "lo";
+commandState.commandSelected = 0;
+let commandFrame = renderFrame(commandState);
+assert(commandFrame.split("\n").length <= commandState.rows, "command frame fits terminal rows");
+assert(commandFrame.includes("/lo"), "command panel query rendered");
+assert(commandFrame.includes("load"), "command panel filters commands");
+assert(commandFrame.includes("Esc close"), "command panel help rendered");
 
 let escapedState = copyState(state);
 escapedState.events = [

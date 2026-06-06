@@ -63,6 +63,9 @@ function createStateWithSize(app, size) {
     detailScroll: 0,
     answer: "",
     error: "",
+    commandOpen: false,
+    commandQuery: "",
+    commandSelected: 0,
     confirmExit: false,
     shouldExit: false,
     transcriptCache: null,
@@ -712,9 +715,142 @@ function nextFocus(state) {
   }
 }
 
+function commandItems() {
+  return [
+    { name: "send", description: "Send the current prompt" },
+    { name: "new", description: "Start a new session" },
+    { name: "load", description: "Load the latest session" },
+    { name: "save", description: "Save the prompt draft" },
+    { name: "clear", description: "Clear the prompt input" },
+    { name: "focus", description: "Switch between prompt and transcript" },
+    { name: "quit", description: "Quit the TUI" },
+  ];
+}
+
+function commandMatches(state) {
+  let query = String(state.commandQuery || "").toLowerCase();
+  let out = [];
+  for (let item of commandItems()) {
+    let haystack = (item.name + " " + item.description).toLowerCase();
+    if (query === "" || haystack.indexOf(query) >= 0) {
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+function clampCommandSelection(state) {
+  let matches = commandMatches(state);
+  let max = matches.length - 1;
+  if (max < 0) {
+    max = 0;
+  }
+  state.commandSelected = clamp(state.commandSelected, 0, max);
+}
+
+function openCommandPanel(state) {
+  state.commandOpen = true;
+  state.commandQuery = "";
+  state.commandSelected = 0;
+  state.confirmExit = false;
+  state.error = "command panel";
+}
+
+function closeCommandPanel(state) {
+  state.commandOpen = false;
+  state.commandQuery = "";
+  state.commandSelected = 0;
+  if (state.error === "command panel") {
+    state.error = "";
+  }
+}
+
+function executeCommand(state, ctx, command) {
+  closeCommandPanel(state);
+  if (!command) {
+    return;
+  }
+
+  if (command.name === "send") {
+    sendMessage(state, ctx);
+  } else if (command.name === "new") {
+    startNewSession(state);
+  } else if (command.name === "load") {
+    loadRecentSession(state);
+  } else if (command.name === "save") {
+    saveTask(state);
+  } else if (command.name === "clear") {
+    clearInput(state);
+    state.error = "input cleared";
+  } else if (command.name === "focus") {
+    nextFocus(state);
+  } else if (command.name === "quit") {
+    state.shouldExit = true;
+  }
+}
+
+function handleCommandKey(state, item, ctx) {
+  if (item.id === "ctrl+c") {
+    closeCommandPanel(state);
+    return true;
+  }
+  if (item.id === "escape") {
+    closeCommandPanel(state);
+    return true;
+  }
+  if (item.id === "backspace") {
+    if (state.commandQuery !== "") {
+      let list = chars(state.commandQuery);
+      state.commandQuery = list.slice(0, list.length - 1).join("");
+      state.commandSelected = 0;
+    } else {
+      closeCommandPanel(state);
+    }
+    return true;
+  }
+  if (item.id === "up") {
+    state.commandSelected = state.commandSelected - 1;
+    clampCommandSelection(state);
+    return true;
+  }
+  if (item.id === "down") {
+    state.commandSelected = state.commandSelected + 1;
+    clampCommandSelection(state);
+    return true;
+  }
+  if (item.id === "enter") {
+    let matches = commandMatches(state);
+    executeCommand(state, ctx, matches[state.commandSelected]);
+    return true;
+  }
+  if (item.id === "text") {
+    state.commandQuery = state.commandQuery + item.text;
+    state.commandSelected = 0;
+    clampCommandSelection(state);
+    return true;
+  }
+  if (item.id === "paste") {
+    state.commandQuery = state.commandQuery + item.text;
+    state.commandSelected = 0;
+    clampCommandSelection(state);
+    return true;
+  }
+  return true;
+}
+
 function handleKey(state, item, ctx) {
   if (item.id === "mouse") {
     handleMouse(state, item);
+    return;
+  }
+
+  if (state.commandOpen) {
+    handleCommandKey(state, item, ctx);
+    return;
+  }
+
+  if (item.id === "text" && item.text === "/" && state.taskText.trim() === "") {
+    openCommandPanel(state);
     return;
   }
 

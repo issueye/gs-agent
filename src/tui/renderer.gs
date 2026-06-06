@@ -312,7 +312,7 @@ function drawComposer(state, width, height) {
   let lines = splitLines(state.taskText);
   let current = takeLine(lines, state.cursorLine);
   let currentLine = state.cursorLine + 1;
-  let hint = "Prompt  line " + String(currentLine) + "/" + String(lines.length) + "  Enter send  Ctrl+R send";
+  let hint = "Prompt  line " + String(currentLine) + "/" + String(lines.length) + "  Enter send  Ctrl+R send  / commands";
   let out = [];
   out.push(styleText(line(hint, width), { dim: true, fg: "muted" }));
   let inputRows = Input({
@@ -339,6 +339,9 @@ function drawComposer(state, width, height) {
 
   if (height > 4) {
     let summary = "Ctrl+C to quit  chars=" + String(chars(state.taskText).length) + "  width=" + String(visibleWidth(current));
+    if (state.commandOpen) {
+      summary = "Command panel  Enter run  Esc close  query=" + String(state.commandQuery || "");
+    }
     if (state.focus !== "task") {
       summary = summary + "  focus=" + state.focus;
     }
@@ -350,6 +353,75 @@ function drawComposer(state, width, height) {
   }
   return out.map(function(item) {
     return line(item, width);
+  });
+}
+
+function commandItems() {
+  return [
+    { name: "send", description: "Send the current prompt" },
+    { name: "new", description: "Start a new session" },
+    { name: "load", description: "Load the latest session" },
+    { name: "save", description: "Save the prompt draft" },
+    { name: "clear", description: "Clear the prompt input" },
+    { name: "focus", description: "Switch between prompt and transcript" },
+    { name: "quit", description: "Quit the TUI" },
+  ];
+}
+
+function commandMatches(state) {
+  let query = String(state.commandQuery || "").toLowerCase();
+  let out = [];
+  for (let item of commandItems()) {
+    let haystack = (item.name + " " + item.description).toLowerCase();
+    if (query === "" || haystack.indexOf(query) >= 0) {
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+function drawCommandPanel(state, width, height) {
+  let out = [];
+  let query = String(state.commandQuery || "");
+  let header = "/" + query;
+  if (header === "/") {
+    header = "/ commands";
+  }
+  out.push(styleText(line(header, width), { bold: true, fg: "warning" }));
+  out.push(styleText(line("Type to filter, Enter to run, Esc to close", width), { dim: true, fg: "muted" }));
+
+  let matches = commandMatches(state);
+  let selected = state.commandSelected || 0;
+  if (matches.length === 0) {
+    out.push(styleText(line("No commands match.", width), { dim: true, fg: "muted" }));
+  } else {
+    let bodyHeight = height - 2;
+    if (bodyHeight < 1) {
+      bodyHeight = 1;
+    }
+    let start = 0;
+    if (selected >= bodyHeight) {
+      start = selected - bodyHeight + 1;
+    }
+    for (let i = 0; i < bodyHeight; i = i + 1) {
+      let index = start + i;
+      let row = "";
+      if (index < matches.length) {
+        let item = matches[index];
+        row = "  " + item.name + "  " + styleText(item.description, { dim: true, fg: "muted" });
+        if (index === selected) {
+          row = INVERSE + padRight(truncateToWidth("> " + item.name + "  " + item.description, width), width) + RESET;
+        }
+      }
+      out.push(row);
+    }
+  }
+
+  while (out.length < height) {
+    out.push("");
+  }
+  return out.map(function(row) {
+    return line(row, width);
   });
 }
 
@@ -650,10 +722,18 @@ export function renderContentFrame(state) {
   }
 
   let composerHeight = 6;
+  let commandHeight = 0;
+  if (state.commandOpen) {
+    commandHeight = 10;
+    if (rows < 22) {
+      commandHeight = 7;
+    }
+  }
   let transcriptHeight = rows;
   if (!hasContentRows) {
     transcriptHeight = rows - composerHeight;
   }
+  transcriptHeight = transcriptHeight - commandHeight;
   if (transcriptHeight < 1) {
     transcriptHeight = 1;
   }
@@ -665,8 +745,17 @@ export function renderContentFrame(state) {
     lines.push(row);
   }
 
+  let commandStart = lines.length + 1;
+  if (state.commandOpen) {
+    let panel = drawCommandPanel(state, cols, commandHeight);
+    for (let row of panel) {
+      lines.push(row);
+    }
+  }
+
   state.layout = {
     details: { row: detailsStart, col: 1, height: transcriptHeight, width: cols },
+    command: { row: commandStart, col: 1, height: commandHeight, width: cols },
   };
 
   return lines.join("\n");
