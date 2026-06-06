@@ -36,6 +36,7 @@ if (!$SkipSmoke) {
   & $GsExe --timeout 20s app-root-smoke-test.gs
   & $GsExe --timeout 20s file-tools-smoke-test.gs
   & $GsExe --timeout 20s invalid-tool-streak-smoke-test.gs
+  & $GsExe --timeout 20s agent-cancel-smoke-test.gs
   & $GsExe --timeout 20s anthropic-empty-body-smoke-test.gs
   & $GsExe --timeout 20s llm-body-log-smoke-test.gs
   & $GsExe --timeout 20s todo-tool-smoke-test.gs

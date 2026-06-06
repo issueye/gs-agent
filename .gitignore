@@ -5,4 +5,6 @@
 *.txt
 
 .agent/
+build/
+dist/
 agent.local.toml

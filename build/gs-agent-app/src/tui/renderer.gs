@@ -1,6 +1,7 @@
 import { INVERSE, RESET, chars, color, line, padRight, repeatText, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
 import { estimateContextTokens } from "@/agent/core/context";
 import { compactLoading, loadingFrame } from "@/tui/loading";
+import { commandItems, tr } from "@/tui/i18n";
 import { Input, Markdown } from "@/tui/components";
 import { banner, border, clampScroll, joinColumns, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
 
@@ -77,6 +78,33 @@ function toolResultText(content) {
   return JSON.stringify(result);
 }
 
+function toolResultOk(content) {
+  let parsed = parseJsonText(content);
+  if (!parsed) {
+    return undefined;
+  }
+  if (parsed.ok === false) {
+    return false;
+  }
+  if (parsed.result) {
+    if (parsed.result.ok === false) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function toolResultDot(content) {
+  let ok = toolResultOk(content);
+  if (ok === false) {
+    return color("●", "error");
+  }
+  if (ok === true) {
+    return color("●", "success");
+  }
+  return color("●", "muted");
+}
+
 function welcomePanel(state, width) {
   let model = "unknown";
   if (state.app.config.llm) {
@@ -126,15 +154,15 @@ function welcomePanel(state, width) {
   rows.push(line(top, width));
   rows.push(color("│", "warning") + styleText(line(pet[0], 13), { bold: true, fg: "warning" }) + line(" model=" + model, inner - 13) + color("│", "warning"));
   rows.push(color("│", "warning") + styleText(line(pet[1], 13), { bold: true, fg: "warning" }) + line(" project=" + root, inner - 13) + color("│", "warning"));
-  rows.push(color("│", "warning") + styleText(line(pet[2], 13), { bold: true, fg: "warning" }) + line(" Enter send  Ctrl+O load session  Tab focus", inner - 13) + color("│", "warning"));
+  rows.push(color("│", "warning") + styleText(line(pet[2], 13), { bold: true, fg: "warning" }) + line(" " + tr(state, "enterSend") + "  " + tr(state, "loadSession") + "  Tab " + tr(state, "focus"), inner - 13) + color("│", "warning"));
   rows.push(color("│", "warning") + styleText(line(pet[3], 13), { bold: true, fg: "warning" }) + line("", inner - 13) + color("│", "warning"));
   rows.push(line(color("└" + repeatText("─", width - 2) + "┘", "warning"), width));
   return rows;
 }
 
-function eventTitle(event) {
+function eventTitle(state, event) {
   if (!event) {
-    return "no event";
+    return tr(state, "noEvent");
   }
 
   let kind = event.kind;
@@ -168,7 +196,7 @@ export function eventSummary(event) {
     return "";
   }
 
-  let title = eventTitle(event);
+  let title = eventTitle(undefined, event);
   let payload = event.payload;
   if (event.kind === "message" && payload.content) {
     return title + " - " + safeText(payload.content).split("\n")[0];
@@ -177,7 +205,7 @@ export function eventSummary(event) {
     return title + " " + JSON.stringify(payload.args);
   }
   if (event.kind === "tool_result" && payload.content) {
-    return title + " " + truncateToWidth(payload.content, 60);
+    return toolResultDot(payload.content) + " " + title + " " + truncateToWidth(toolResultText(payload.content), 60);
   }
   if (event.kind === "error") {
     return title + " " + safeText(payload.message);
@@ -188,9 +216,9 @@ export function eventSummary(event) {
   return title;
 }
 
-export function eventDetails(event) {
+export function eventDetails(state, event) {
   if (!event) {
-    return "No event selected.";
+    return tr(state, "noEventSelected");
   }
   if (event.kind === "answer") {
     return safeText(event.payload.content);
@@ -258,36 +286,40 @@ function contextUsageText(state) {
 }
 
 function statusText(state) {
-  let run = "idle";
+  let run = tr(state, "idle");
   if (state.running) {
-    run = compactLoading(true, state.tick, "running");
+    if (state.cancelRequested) {
+      run = compactLoading(true, state.tick, tr(state, "cancelling"));
+    } else {
+      run = compactLoading(true, state.tick, tr(state, "running"));
+    }
   }
   let dirty = "";
   if (state.dirty) {
-    dirty = " modified";
+    dirty = " " + tr(state, "modified");
   }
   let error = "";
   if (state.error) {
-    error = "  error=" + state.error;
+    error = "  " + tr(state, "error") + "=" + state.error;
   }
   let answer = "";
   if (state.answer) {
-    answer = "  answer=ready";
+    answer = "  " + tr(state, "answerReady");
   }
   let log = "";
   if (state.app.latestLogFile) {
-    log = "  log=.agent/logs/latest.log";
+    log = "  " + tr(state, "log") + "=.agent/logs/latest.log";
   }
   let messages = "";
   if (state.messages) {
-    messages = "  messages=" + String(state.messages.length);
+    messages = "  " + tr(state, "messages") + "=" + String(state.messages.length);
   }
   return run + dirty + "  events=" + String(state.events.length) + messages + contextUsageText(state) + answer + error + log;
 }
 
 function drawTask(state, width, height) {
   let out = [];
-  out.push(styleText("Task", { bold: true, fg: "accent" }) + " " + styleText(state.app.taskFile, { dim: true, fg: "muted" }));
+  out.push(styleText(tr(state, "task"), { bold: true, fg: "accent" }) + " " + styleText(state.app.taskFile, { dim: true, fg: "muted" }));
   let lines = splitLines(state.taskText);
   let bodyHeight = height - 1;
   let offset = state.taskScroll;
@@ -310,40 +342,61 @@ function drawTask(state, width, height) {
 
 function drawComposer(state, width, height) {
   let lines = splitLines(state.taskText);
+  let bodyHeight = height - 4;
+  if (bodyHeight < 1) {
+    bodyHeight = 1;
+  }
+  let offset = state.taskScroll || 0;
   let current = takeLine(lines, state.cursorLine);
   let currentLine = state.cursorLine + 1;
-  let hint = "Prompt  line " + String(currentLine) + "/" + String(lines.length) + "  Enter send  Ctrl+R send  / commands";
+  let hint = tr(state, "prompt") + "  line " + String(currentLine) + "/" + String(lines.length) + "  " + tr(state, "enterSend") + "  " + tr(state, "sendHelp") + "  / commands";
   let out = [];
   out.push(styleText(line(hint, width), { dim: true, fg: "muted" }));
-  let inputRows = Input({
-    width: width,
-    title: "",
-    value: current,
-    cursor: state.cursorCol,
-    focused: state.focus === "task",
-    prompt: "> ",
-  });
-  if (inputRows.length > 1) {
-    out.push(inputRows[1]);
-  } else {
-    out.push("");
+  for (let i = 0; i < bodyHeight; i = i + 1) {
+    let index = offset + i;
+    let value = takeLine(lines, index);
+    let prompt = "  ";
+    let cursor = -1;
+    let focused = false;
+    if (index === state.cursorLine) {
+      prompt = "> ";
+      cursor = state.cursorCol;
+      focused = state.focus === "task";
+    }
+    let inputRows = Input({
+      width: width,
+      title: "",
+      value: value,
+      cursor: cursor,
+      focused: focused,
+      prompt: prompt,
+    });
+    if (inputRows.length > 1) {
+      out.push(inputRows[1]);
+    } else {
+      out.push(line(prompt + value, width));
+    }
   }
   out.push(styleText(border(width, "─"), { fg: "border" }));
   if (height > 5) {
     let loading = "";
     if (state.running) {
-      loading = color(loadingFrame(state.tick || 0), "warning") + " " + styleText("running", { fg: "muted" });
+      let label = tr(state, "running");
+      if (state.cancelRequested) {
+        label = tr(state, "cancelling");
+      }
+      loading = color(loadingFrame(state.tick || 0), "warning") + " " + styleText(label, { fg: "muted" });
     }
     out.push(line(loading, width));
   }
 
   if (height > 4) {
-    let summary = "Ctrl+C to quit  chars=" + String(chars(state.taskText).length) + "  width=" + String(visibleWidth(current));
+    let summary = tr(state, "quit") + "  " + tr(state, "chars") + "=" + String(chars(state.taskText).length) + "  " + tr(state, "width") + "=" + String(visibleWidth(current));
     if (state.commandOpen) {
-      summary = "Command panel  Enter run  Esc close  query=" + String(state.commandQuery || "");
+      summary = tr(state, "commandPanel") + "  " + tr(state, "enterRun") + "  " + tr(state, "escClose") + "  " + tr(state, "commandQuery") + "=" + String(state.commandQuery || "");
     }
     if (state.focus !== "task") {
-      summary = summary + "  focus=" + state.focus;
+      summary = summary + "  " + tr(state, "focus") + "=" + state.focus;
     }
     out.push(styleText(line(summary, width), { dim: true, fg: "muted" }));
   }
@@ -356,23 +409,15 @@ function drawComposer(state, width, height) {
   });
 }
 
-function commandItems() {
-  return [
-    { name: "send", description: "Send the current prompt" },
-    { name: "new", description: "Start a new session" },
-    { name: "load", description: "Load the latest session" },
-    { name: "save", description: "Save the prompt draft" },
-    { name: "clear", description: "Clear the prompt input" },
-    { name: "focus", description: "Switch between prompt and transcript" },
-    { name: "quit", description: "Quit the TUI" },
-  ];
-}
-
 function commandMatches(state) {
   let query = String(state.commandQuery || "").toLowerCase();
   let out = [];
-  for (let item of commandItems()) {
-    let haystack = (item.name + " " + item.description).toLowerCase();
+  for (let item of commandItems(state)) {
+    let aliases = "";
+    if (item.aliases) {
+      aliases = item.aliases.join(" ");
+    }
+    let haystack = (item.name + " " + item.description + " " + aliases).toLowerCase();
     if (query === "" || haystack.indexOf(query) >= 0) {
       out.push(item);
     }
@@ -385,15 +430,15 @@ function drawCommandPanel(state, width, height) {
   let query = String(state.commandQuery || "");
   let header = "/" + query;
   if (header === "/") {
-    header = "/ commands";
+    header = tr(state, "commandsHeader");
   }
   out.push(styleText(line(header, width), { bold: true, fg: "warning" }));
-  out.push(styleText(line("Type to filter, Enter to run, Esc to close", width), { dim: true, fg: "muted" }));
+  out.push(styleText(line(tr(state, "commandHelp"), width), { dim: true, fg: "muted" }));
 
   let matches = commandMatches(state);
   let selected = state.commandSelected || 0;
   if (matches.length === 0) {
-    out.push(styleText(line("No commands match.", width), { dim: true, fg: "muted" }));
+    out.push(styleText(line(tr(state, "noCommands"), width), { dim: true, fg: "muted" }));
   } else {
     let bodyHeight = height - 2;
     if (bodyHeight < 1) {
@@ -480,8 +525,8 @@ function transcriptRows(state, width) {
 
   let out = [];
   if (state.events.length === 0) {
-    out.push(styleText("No messages yet. Write a task below and press Ctrl+R.", { dim: true, fg: "muted" }));
-    out.push(styleText("Use Ctrl+O to restore the latest session.", { dim: true, fg: "muted" }));
+    out.push(styleText(tr(state, "noMessages"), { dim: true, fg: "muted" }));
+    out.push(styleText(tr(state, "restoreSession"), { dim: true, fg: "muted" }));
     state.transcriptCache = {
       width: width,
       events: state.events.length,
@@ -491,6 +536,7 @@ function transcriptRows(state, width) {
   }
 
   let lastAssistantText = "";
+  let pendingToolRows = {};
   for (let event of state.events) {
     let payload = event.payload;
     if (!payload) {
@@ -523,12 +569,22 @@ function transcriptRows(state, width) {
 
     if (event.kind === "tool_call") {
       let label = "Tool(" + safeText(payload.name) + ")";
-      out.push(transcriptLine(color("* ", "success") + styleText(label, { bold: true, fg: "text" }) + styleText(" " + compactJson(payload.args), { dim: true, fg: "muted" }), width, width));
+      let key = safeText(payload.id || payload.name);
+      pendingToolRows[key] = out.length;
+      out.push(transcriptLine(color("● ", "muted") + styleText(label, { bold: true, fg: "text" }) + styleText(" " + compactJson(payload.args), { dim: true, fg: "muted" }), width, width));
       continue;
     }
 
     if (event.kind === "tool_result") {
-      pushWrappedWithPrefix(out, "  | ", styleText(truncateToWidth(toolResultText(payload.content), width * 2), { fg: "muted" }), width, undefined);
+      let key = safeText(payload.id || payload.name);
+      let marker = toolResultDot(payload.content);
+      if (key in pendingToolRows) {
+        let label = "Tool(" + safeText(payload.name) + ")";
+        out[pendingToolRows[key]] = transcriptLine(marker + " " + styleText(label, { bold: true, fg: "text" }), width, width);
+        pushWrappedWithPrefix(out, "  | ", styleText(truncateToWidth(toolResultText(payload.content), width * 2), { fg: "muted" }), width, undefined);
+      } else {
+        pushWrappedWithPrefix(out, "  " + marker + " ", styleText(truncateToWidth(toolResultText(payload.content), width * 2), { fg: "muted" }), width, undefined);
+      }
       continue;
     }
 
@@ -584,7 +640,7 @@ function drawTranscript(state, width, height) {
   let offset = clampScroll(state.detailScroll, maxScroll);
   state.detailScroll = offset;
   let out = [];
-  out.push(styleText("Transcript", { bold: true, fg: "text" }));
+  out.push(styleText(tr(state, "transcript"), { bold: true, fg: "text" }));
   for (let i = 0; i < bodyHeight; i = i + 1) {
     out.push(takeLine(rows, offset + i));
   }
@@ -595,7 +651,7 @@ function drawTranscript(state, width, height) {
 
 function drawTimeline(state, width, height) {
   let out = [];
-  out.push(styleText("Run Timeline", { bold: true, fg: "accent" }));
+  out.push(styleText(tr(state, "timeline"), { bold: true, fg: "accent" }));
   let bodyHeight = height - 1;
   let offset = state.eventScroll;
 
@@ -621,7 +677,7 @@ function drawDetails(state, width, height) {
   if (state.selectedEvent >= 0 && state.selectedEvent < state.events.length) {
     event = state.events[state.selectedEvent];
   }
-  let text = eventDetails(event);
+  let text = eventDetails(state, event);
   if (!event) {
     if (state.answer) {
       text = state.answer;
@@ -641,7 +697,7 @@ function drawDetails(state, width, height) {
   }
   let detailScroll = clampScroll(state.detailScroll, maxScroll);
   let out = [];
-  out.push(styleText(scrollTitle("Details", detailScroll, bodyHeight, lines.length), { bold: true, fg: "accent" }));
+  out.push(styleText(scrollTitle(tr(state, "details"), detailScroll, bodyHeight, lines.length), { bold: true, fg: "accent" }));
   for (let i = 0; i < bodyHeight; i = i + 1) {
     out.push(takeLine(lines, detailScroll + i));
   }

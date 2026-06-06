@@ -7,9 +7,17 @@ export function createAgent(options) {
   let maxTurns = options.maxTurns;
   let onEvent = options.onEvent;
   let contextSelector = options.contextSelector;
+  let isCancelled = options.isCancelled;
 
   if (!maxTurns) {
     maxTurns = 8;
+  }
+
+  function cancelRequested() {
+    if (!isCancelled) {
+      return false;
+    }
+    return !!isCancelled();
   }
 
   // 所有关键事件统一从这里发出，同时写入 JSONL session。
@@ -47,6 +55,9 @@ export function createAgent(options) {
     }
 
     for (let turn = 0; turn < maxTurns; turn = turn + 1) {
+      if (cancelRequested()) {
+        return cancelledAnswer(messages, emit);
+      }
       emit("turn_start", { turn: turn });
       let allowTools = true;
       let requestMessages = messages.slice(0);
@@ -75,6 +86,10 @@ export function createAgent(options) {
         tools = [];
       }
       let next = provider.next(requestMessages, tools, { allowTools: allowTools });
+      if (cancelRequested()) {
+        emit("turn_end", { turn: turn, stop: "cancelled" });
+        return cancelledAnswer(messages, emit);
+      }
       let textToolCall = parseTextToolCall(next.content, turn);
       if (textToolCall) {
         next = textToolCall;
@@ -96,7 +111,15 @@ export function createAgent(options) {
         emit("tool_call", next);
         messages.push(next);
 
+        if (cancelRequested()) {
+          emit("turn_end", { turn: turn, stop: "cancelled" });
+          return cancelledAnswer(messages, emit);
+        }
         let result = sanitizeToolResult(next.name, registry.safeCall(next.name, next.args));
+        if (cancelRequested()) {
+          emit("turn_end", { turn: turn, stop: "cancelled" });
+          return cancelledAnswer(messages, emit);
+        }
         let toolMessage = {
           role: "tool",
           id: next.id,
@@ -162,6 +185,16 @@ export function createAgent(options) {
     run: run,
     runMessages: runMessages,
   };
+}
+
+function cancelledAnswer(messages, emit) {
+  let answer = {
+    role: "assistant",
+    content: "Agent interrupted by user.",
+  };
+  messages.push(answer);
+  emit("message", answer);
+  return answer;
 }
 
 function isInvalidToolArgs(result) {

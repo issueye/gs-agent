@@ -62,6 +62,8 @@ let state = {
   cursorCol: 0,
   dirty: false,
   running: false,
+  cancelRequested: false,
+  uiLanguage: "en",
   focus: "timeline",
   events: [
     {
@@ -74,10 +76,19 @@ let state = {
     {
       kind: "tool_call",
       payload: {
+        id: "tool-readme",
         name: "read_file",
         args: {
           path: "README.md",
         },
+      },
+    },
+    {
+      kind: "tool_result",
+      payload: {
+        id: "tool-readme",
+        name: "read_file",
+        content: "{\"ok\":true,\"name\":\"read_file\",\"result\":{\"path\":\"README.md\"}}",
       },
     },
     {
@@ -119,6 +130,8 @@ function copyState(base) {
     cursorCol: base.cursorCol,
     dirty: base.dirty,
     running: base.running,
+    cancelRequested: base.cancelRequested,
+    uiLanguage: base.uiLanguage,
     focus: base.focus,
     events: base.events,
     selectedEvent: base.selectedEvent,
@@ -158,9 +171,12 @@ tickState.tick = 2;
 let tickFrame = renderFrame(tickState);
 assert(tickFrame === frame, "no fixed animated header");
 assert(frame.includes("read_file"), "tool event");
+let cleanFrame = stripAnsi(frame);
+assert(cleanFrame.includes("● Tool(read_file)"), "tool call uses round status marker");
+assert(!cleanFrame.includes("* Tool(read_file)"), "tool call star marker removed");
 assert(frame.includes("Transcript"), "transcript");
 assert(frame.includes("Prompt"), "composer");
-assert(frame.includes("Enter send"), "enter send hint");
+assert(frame.includes("Enter newline"), "enter newline hint");
 assert(frame.includes("Ctrl+C to quit"), "composer bottom hint");
 assert(frame.includes("读取 README.md 并总结"), "zh render");
 assert(frame.includes("最终答案"), "answer render");
@@ -188,6 +204,13 @@ runningState.tick = 2;
 let runningComposer = renderComposerFrame(runningState);
 assert(stripAnsi(runningComposer).includes("| running"), "composer loading animation");
 
+let cancellingState = copyState(state);
+cancellingState.running = true;
+cancellingState.cancelRequested = true;
+cancellingState.tick = 2;
+let cancellingComposer = renderComposerFrame(cancellingState);
+assert(stripAnsi(cancellingComposer).includes("| cancelling"), "composer cancelling animation");
+
 let commandState = copyState(state);
 commandState.commandOpen = true;
 commandState.commandQuery = "lo";
@@ -197,6 +220,18 @@ assert(commandFrame.split("\n").length <= commandState.rows, "command frame fits
 assert(commandFrame.includes("/lo"), "command panel query rendered");
 assert(commandFrame.includes("load"), "command panel filters commands");
 assert(commandFrame.includes("Esc close"), "command panel help rendered");
+
+let zhState = copyState(state);
+zhState.uiLanguage = "zh";
+zhState.commandOpen = true;
+zhState.commandQuery = "语";
+zhState.commandSelected = 0;
+let zhFrame = renderFrame(zhState);
+assert(zhFrame.includes("会话记录"), "zh transcript title rendered");
+assert(zhFrame.includes("输入"), "zh prompt title rendered");
+assert(zhFrame.includes("切换中文/英文界面"), "zh language command rendered");
+assert(zhFrame.includes("Esc 关闭"), "zh command help rendered");
+assert(zhFrame.includes("Enter 换行"), "zh enter newline hint rendered");
 
 let escapedState = copyState(state);
 escapedState.events = [
@@ -219,11 +254,27 @@ escapedState.detailScroll = 0;
 escapedState.transcriptCache = null;
 let escapedFrame = renderFrame(escapedState);
 let escapedRows = escapedState.transcriptCache.rows.join("\n");
+assert(escapedFrame.includes("●"), "tool result uses round status marker");
 assert(escapedFrame.includes("第一行"), "tool result text rendered");
 assert(escapedFrame.includes("第二行"), "tool result newline decoded");
 assert(escapedFrame.includes("标题"), "assistant json string decoded");
 assert(!escapedRows.includes("{\"ok\":true"), "tool result json hidden");
 assert(!escapedRows.includes("\\n"), "escaped newline hidden");
+
+let failedToolState = copyState(state);
+failedToolState.events = [
+  {
+    kind: "tool_result",
+    payload: {
+      name: "write_file",
+      content: "{\"ok\":false,\"name\":\"write_file\",\"error\":\"bad args\"}",
+    },
+  },
+];
+failedToolState.transcriptCache = null;
+let failedToolFrame = renderFrame(failedToolState);
+assert(failedToolFrame.includes("●"), "failed tool result uses round status marker");
+assert(failedToolFrame.includes("bad args"), "failed tool error rendered");
 
 let inlineTableRows = stripAnsi(Markdown({
   width: 80,
@@ -324,10 +375,21 @@ for (let row of frameLines) {
     inputLines.push(row);
   }
 }
-assert(inputLines.length === 1, "one composer input line");
+assert(inputLines.length === 1, "one active composer input line");
 assert(!inputLines[0].includes("Transcript"), "composer isolated from transcript");
 assert(!inputLines[0].includes("Enter"), "composer input contains only prompt text");
 assert(!inputLines[0].includes("Ctrl+C to quit"), "composer input excludes bottom hint");
+
+let multiLineState = copyState(state);
+multiLineState.taskText = "第一行\n第二行\n第三行";
+multiLineState.cursorLine = 1;
+multiLineState.cursorCol = 2;
+multiLineState.focus = "task";
+let multiLineComposer = renderComposerFrame(multiLineState);
+assert(multiLineComposer.includes("第一行"), "composer shows previous prompt line");
+let cleanMultiLineComposer = stripAnsi(multiLineComposer);
+assert(cleanMultiLineComposer.includes("第二") && cleanMultiLineComposer.includes("行"), "composer shows active prompt line");
+assert(multiLineComposer.split("\n").length === 6, "multi-line composer stays fixed height");
 
 let sideEffectState = {
   app: state.app,

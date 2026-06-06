@@ -147,6 +147,7 @@ function createAppKit(app, logger, onEvent) {
     sessionArchiveFile: app.sessionArchiveFile,
     contextTokenThreshold: contextTokenThreshold(app.config, app.agent),
     maxTurns: app.agent.maxTurns,
+    isCancelled: app.agent.isCancelled,
     onEvent: function(event) {
       logger.info("agent event", eventLogFields(event));
       if (onEvent) {
@@ -322,6 +323,7 @@ export function runAgentTurn(options) {
     answerFile: app.answerFile,
   });
 
+  app.agent.isCancelled = options.isCancelled;
   let kit = createAppKit(app, logger, options.onEvent);
 
   try {

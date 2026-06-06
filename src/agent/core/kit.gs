@@ -62,6 +62,7 @@ export function createCodingAgent(options) {
     session: session,
     maxTurns: options.maxTurns,
     contextSelector: contextSelector,
+    isCancelled: options.isCancelled,
     onEvent: options.onEvent,
   });
 
