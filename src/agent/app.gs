@@ -54,7 +54,6 @@ function defaultAgentConfig() {
     includeSkills: true,
     skillDir: ".agent/skills",
     skills: ["*"],
-    maxSkillChars: 8000,
     tools: ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"],
     taskFile: "workspace/task.txt",
   };
@@ -112,9 +111,6 @@ function agentConfig(config) {
   }
   if (!agent.skills) {
     agent.skills = defaults.skills;
-  }
-  if (!agent.maxSkillChars) {
-    agent.maxSkillChars = defaults.maxSkillChars;
   }
   if (!agent.taskFile) {
     agent.taskFile = defaults.taskFile;

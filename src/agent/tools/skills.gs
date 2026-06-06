@@ -6,10 +6,8 @@ let path = require("@std/path");
 
 function isSkillNameChar(ch) {
   return (ch >= "a" && ch <= "z")
-    || (ch >= "A" && ch <= "Z")
     || (ch >= "0" && ch <= "9")
-    || ch === "-"
-    || ch === "_";
+    || ch === "-";
 }
 
 function normalizeSkillName(name) {
@@ -17,12 +15,18 @@ function normalizeSkillName(name) {
   if (value === "") {
     throw new TypeError("skill name is required");
   }
+  if (value.length > 64) {
+    throw new TypeError("skill name must be at most 64 characters");
+  }
+  if (value.startsWith("-") || value.endsWith("-")) {
+    throw new TypeError("skill name cannot start or end with hyphen");
+  }
 
   let out = "";
   for (let i = 0; i < value.length; i = i + 1) {
     let ch = value[i];
     if (!isSkillNameChar(ch)) {
-      throw new TypeError("skill name may only contain letters, numbers, hyphen, and underscore");
+      throw new TypeError("skill name may only contain lowercase letters, numbers, and hyphen");
     }
     out = out + ch;
   }
@@ -33,12 +37,12 @@ function normalizeSkillName(name) {
   return out;
 }
 
-function tomlString(value) {
+function yamlString(value) {
   return "\"" + String(value || "")
     .replaceAll("\\", "\\\\")
     .replaceAll("\"", "\\\"")
-    .replaceAll("\r", "\\r")
-    .replaceAll("\n", "\\n") + "\"";
+    .replaceAll("\r", " ")
+    .replaceAll("\n", " ") + "\"";
 }
 
 function defaultSkillContent(name, description) {
@@ -49,10 +53,29 @@ function defaultSkillContent(name, description) {
   return "# " + title + "\n\n## Instructions\n\n- Add the concrete workflow for this skill here.\n";
 }
 
+function hasFrontmatter(content) {
+  return String(content || "").replaceAll("\r\n", "\n").startsWith("---\n");
+}
+
+function skillDocument(name, description, content) {
+  let body = String(content || "").trim();
+  if (!body || body === "") {
+    body = defaultSkillContent(name, description).trim();
+  }
+  if (hasFrontmatter(body)) {
+    return body + "\n";
+  }
+  return "---\n"
+    + "name: " + yamlString(name) + "\n"
+    + "description: " + yamlString(description) + "\n"
+    + "---\n\n"
+    + body + "\n";
+}
+
 export function createCreateSkillTool(cwd) {
   return createTool(
     "create_skill",
-    "Create a local agent skill under .agent/skills/<name>. Writes skill.toml and SKILL.md. Use overwrite=true only when replacing an existing skill intentionally.",
+    "Create a local agent skill under .agent/skills/<name>. Writes a SKILL.md file with YAML frontmatter name and description. Use overwrite=true only when replacing an existing skill intentionally.",
     {
       type: "object",
       required: ["name"],
@@ -67,31 +90,21 @@ export function createCreateSkillTool(cwd) {
     function(args) {
       let name = normalizeSkillName(args.name);
       let description = args.description || "";
-      let content = args.content;
-      if (!content || content.trim() === "") {
-        content = defaultSkillContent(name, description);
-      }
+      let content = skillDocument(name, description, args.content);
 
       let skillDir = workspacePath(cwd, path.join(".agent", "skills", name));
-      let manifestFile = path.join(skillDir, "skill.toml");
       let skillFile = path.join(skillDir, "SKILL.md");
-      if (!args.overwrite && (fs.existsSync(manifestFile) || fs.existsSync(skillFile))) {
+      if (!args.overwrite && fs.existsSync(skillFile)) {
         throw new ReferenceError("skill already exists: " + name + " (set overwrite=true to replace it)");
       }
 
       fs.mkdirSync(skillDir, { recursive: true });
-      fs.writeTextSync(
-        manifestFile,
-        "name = " + tomlString(name) + "\n"
-          + "description = " + tomlString(description) + "\n"
-      );
-      fs.writeTextSync(skillFile, content.trim() + "\n");
+      fs.writeTextSync(skillFile, content);
 
       return {
         name: name,
         description: description,
         dir: path.join(".agent", "skills", name),
-        manifestFile: path.join(".agent", "skills", name, "skill.toml"),
         skillFile: path.join(".agent", "skills", name, "SKILL.md"),
         overwritten: !!args.overwrite,
       };

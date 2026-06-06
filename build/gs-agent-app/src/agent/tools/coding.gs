@@ -1,6 +1,7 @@
 import { createReadFileTool, createListDirTool, createWriteFileTool, createAppendFileTool } from "@/agent/tools/files";
 import { createBashTool } from "@/agent/tools/bash";
 import { createGrepTool } from "@/agent/tools/grep";
+import { createCreateSkillTool } from "@/agent/tools/skills";
 import { createTodoTool } from "@/agent/tools/todo";
 
 function includes(list, value) {
@@ -42,6 +43,9 @@ export function createCodingTools(cwd, enabledTools) {
   }
   if (includes(enabledTools, "todo")) {
     tools.push(createTodoTool(cwd));
+  }
+  if (includes(enabledTools, "create_skill")) {
+    tools.push(createCreateSkillTool(cwd));
   }
 
   return tools;

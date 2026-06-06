@@ -12,6 +12,7 @@
 - `src/agent/llm`：Anthropic 兼容 provider，以及显式测试用 fake provider。
 - `src/agent/tools`：文件、目录、grep、bash、workspace task 工具。
 - `.agent/tools/*`：运行期动态工具目录，工具脚本由 `@std/runtime.runTool` 在独立 VM 中执行。
+- `.agent/skills/*/SKILL.md`：运行期技能目录，启动时会发现并注入到模型 system prompt。
 - `src/agent/session`：JSONL session 事件记录。
 - `src/tui`：终端交互界面，包含按键解析、ANSI 输出、布局和渲染。
 - `tui.gs`：TUI 直接脚本入口，主要用于开发调试。
@@ -36,7 +37,11 @@ provider = "anthropic"
 taskFile = "workspace/task.txt"
 maxTurns = 10
 includeCodingTools = true
-tools = ["read_file", "list_dir", "grep", "todo"]
+includeSubagents = true
+includeSkills = true
+skillDir = ".agent/skills"
+skills = ["*"]
+tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"]
 
 [llm.anthropic]
 apiKey = "sk-..."
@@ -166,15 +171,17 @@ E:\codes\gts\dist\gs.exe --timeout 60s dist programs\gs-tui-test dist\gs-tui-tes
 默认启用只读代码工具和 todo 任务工具：
 
 ```toml
-tools = ["read_file", "list_dir", "grep", "todo"]
+tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"]
 ```
 
 启用 `todo` 后，模型可以用单个 `todo` 工具管理 `.agent/todos.json` 中的任务，支持 `add`、`list`、`get`、`update`、`delete` 和 `clear`。任务状态为 `open` 或 `done`，`list` 和 `clear` 可按 `status` 过滤。
+启用 `create_skill` 后，模型可以创建带 YAML frontmatter 的 `.agent/skills/<name>/SKILL.md`，用于沉淀新的本地技能。
+启用 `run_subagent` 后，模型可以把聚焦任务委派给一个同步子 agent；子 agent 使用独立 session，默认只拿父 agent 已启用的 `read_file`、`list_dir`、`grep` 和 `todo`。
 
 如需让 agent 写文件或执行 shell 命令，可显式加入：
 
 ```toml
-tools = ["read_file", "list_dir", "grep", "write_file", "append_file", "bash", "todo"]
+tools = ["read_file", "list_dir", "grep", "write_file", "append_file", "bash", "todo", "create_skill", "run_subagent"]
 ```
 
 ## 动态工具
@@ -225,6 +232,96 @@ exports.run = function(input) {
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 ```
 
+## 技能系统
+
+agent 会自动发现 `.agent/skills/*/SKILL.md`。按照 Skills 规范，启动时只把技能的 `name`、`description`、`trigger_keywords` 和文件路径作为索引注入 system prompt；当用户请求命中某个技能时，模型再读取该技能的 `SKILL.md` 完整内容并按其中说明执行。
+
+`SKILL.md` 顶部必须包含 YAML frontmatter。`name` 只能使用小写字母、数字和连字符，最长 64 个字符，且不能以连字符开头或结尾；`description` 必填，用来判断技能何时触发。
+
+目录示例：
+
+```text
+.agent/skills/code-review/
+  SKILL.md
+```
+
+`SKILL.md`：
+
+```markdown
+---
+name: code-review
+description: Review code changes for bugs, regressions, and missing tests.
+trigger_keywords:
+  - review
+  - code review
+---
+
+# Code Review
+
+Use this skill when the user asks for a review.
+
+- Lead with findings ordered by severity.
+- Include file and line references.
+- Keep summaries brief.
+```
+
+默认启用全部本地技能：
+
+```toml
+[agent]
+includeSkills = true
+skillDir = ".agent/skills"
+skills = ["*"]
+```
+
+如果只想启用部分技能，可写：
+
+```toml
+skills = ["code-review", "docs"]
+```
+
+本地自检：
+
+```powershell
+E:\codes\gts\dist\gs.exe --timeout 20s skill-system-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
+```
+
+## Subagent
+
+`run_subagent` 是一个同步委派工具：父 agent 调用后，会创建新的 `.agent/sessions/<session-id>/`，用同一 provider 配置运行一个子 agent，并把子 agent 的最终回答、事件数和 session 路径作为工具结果返回。
+
+工具参数：
+
+```json
+{
+  "role": "explorer",
+  "task": "Inspect src/agent/core and summarize the agent loop.",
+  "maxTurns": 4,
+  "tools": ["read_file", "list_dir", "grep"]
+}
+```
+
+- `task` 必填。
+- `role` 可选，用来给子 agent 一个聚焦身份。
+- `maxTurns` 可选，范围 1 到 12，默认 4。
+- `tools` 可选；只能从父 agent 已启用的工具里选，且不会把 `run_subagent` 继续传给子 agent。
+- 第一版是同步执行，不做后台并行调度；父 agent 会等待子 agent 完成。
+
+配置开关：
+
+```toml
+[agent]
+includeSubagents = true
+tools = ["read_file", "list_dir", "grep", "todo", "run_subagent"]
+```
+
+本地自检：
+
+```powershell
+E:\codes\gts\dist\gs.exe --timeout 20s subagent-smoke-test.gs
+```
+
 ## 本地 smoke test
 
 不调用真实模型，只验证 agent loop、工具调用和 JSONL session：
@@ -233,6 +330,9 @@ E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s todo-tool-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s dynamic-tool-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s skill-system-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s subagent-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s markdown-stdlib-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s provider-test.gs

@@ -7,7 +7,6 @@ includeSubagents = true
 includeSkills = true
 skillDir = ".agent/skills"
 skills = ["*"]
-maxSkillChars = 8000
 tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"]
 taskFile = "workspace/task.txt"
 

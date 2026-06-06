@@ -2,6 +2,8 @@ import { createCodingAgent } from "@/agent/core/kit";
 import { createProvider } from "@/agent/llm/providers";
 import { createRunLogger, eventLogFields, logPaths } from "@/agent/log";
 import { createAgentSession, readCurrentAgentSession, writeCurrentAgentSession } from "@/agent/session/manager";
+import { applySkillsToSystem, discoverSkills } from "@/agent/skills/loader";
+import { createRunSubagentTool } from "@/agent/tools/subagent";
 import { createWorkspaceTools } from "@/agent/tools/workspace";
 
 let fs = require("@std/fs");
@@ -48,7 +50,11 @@ function defaultAgentConfig() {
     system: "You are a concise coding agent. Before acting, analyze the user's request, identify the concrete tasks needed, and state or maintain a brief task plan. Then work through the tasks in order, using tools when useful. Complete the user's requested task and stop when you have a final answer.",
     maxTurns: 10,
     includeCodingTools: true,
-    tools: ["read_file", "list_dir", "grep", "todo"],
+    includeSubagents: true,
+    includeSkills: true,
+    skillDir: ".agent/skills",
+    skills: ["*"],
+    tools: ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"],
     taskFile: "workspace/task.txt",
   };
 }
@@ -91,8 +97,20 @@ function agentConfig(config) {
   if (!("includeCodingTools" in agent)) {
     agent.includeCodingTools = defaults.includeCodingTools;
   }
+  if (!("includeSubagents" in agent)) {
+    agent.includeSubagents = defaults.includeSubagents;
+  }
   if (!agent.tools) {
     agent.tools = defaults.tools;
+  }
+  if (!("includeSkills" in agent)) {
+    agent.includeSkills = defaults.includeSkills;
+  }
+  if (!agent.skillDir) {
+    agent.skillDir = defaults.skillDir;
+  }
+  if (!agent.skills) {
+    agent.skills = defaults.skills;
   }
   if (!agent.taskFile) {
     agent.taskFile = defaults.taskFile;
@@ -163,6 +181,23 @@ export function loadCurrentAgentSession(app) {
 
 function createAppKit(app, logger, onEvent) {
   app.agent.requestBodyLogFile = app.llmBodyLogFile;
+  app.agent.system = app.system;
+  let tools = createWorkspaceTools(app.workspace);
+  if (app.agent.includeSubagents !== false) {
+    tools.push(createRunSubagentTool({
+      root: app.root,
+      config: app.config,
+      agent: app.agent,
+      system: app.system,
+      contextTokenThreshold: contextTokenThreshold(app.config, app.agent),
+      onEvent: function(event) {
+        logger.info("subagent event", eventLogFields(event));
+        if (onEvent) {
+          onEvent(event);
+        }
+      },
+    }));
+  }
   return createCodingAgent({
     cwd: app.root,
     includeCodingTools: app.agent.includeCodingTools,
@@ -178,7 +213,7 @@ function createAppKit(app, logger, onEvent) {
         }
       },
     }),
-    tools: createWorkspaceTools(app.workspace),
+    tools: tools,
     sessionFile: app.sessionFile,
     sessionArchiveFile: app.sessionArchiveFile,
     contextTokenThreshold: contextTokenThreshold(app.config, app.agent),
@@ -236,6 +271,8 @@ export function loadAgentApp(root) {
 
   let config = readConfig(root);
   let agent = agentConfig(config);
+  let skills = discoverSkills(root, agent);
+  let system = applySkillsToSystem(agent.system, skills);
   let workspace = path.join(root, "workspace");
   let session = readCurrentAgentSession(root);
   if (!session) {
@@ -247,6 +284,8 @@ export function loadAgentApp(root) {
     root: root,
     config: config,
     agent: agent,
+    skills: skills,
+    system: system,
     workspace: workspace,
     taskFile: agent.taskFile,
     sessionId: session.sessionId,
@@ -282,6 +321,7 @@ export function runAgentTask(options) {
     baseUrl: info.baseUrl,
     maxTurns: app.agent.maxTurns,
     tools: app.agent.tools,
+    skills: app.skills.length,
     taskFile: app.taskFile,
     sessionFile: sessionFile,
     sessionArchiveFile: app.sessionArchiveFile,
@@ -356,6 +396,7 @@ export function runAgentTurn(options) {
     baseUrl: info.baseUrl,
     maxTurns: app.agent.maxTurns,
     tools: app.agent.tools,
+    skills: app.skills.length,
     messages: messages.length,
     sessionFile: app.sessionFile,
     sessionArchiveFile: app.sessionArchiveFile,

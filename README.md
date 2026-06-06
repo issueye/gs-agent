@@ -41,7 +41,6 @@ includeSubagents = true
 includeSkills = true
 skillDir = ".agent/skills"
 skills = ["*"]
-maxSkillChars = 8000
 tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"]
 
 [llm.anthropic]
@@ -176,7 +175,7 @@ tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"
 ```
 
 启用 `todo` 后，模型可以用单个 `todo` 工具管理 `.agent/todos.json` 中的任务，支持 `add`、`list`、`get`、`update`、`delete` 和 `clear`。任务状态为 `open` 或 `done`，`list` 和 `clear` 可按 `status` 过滤。
-启用 `create_skill` 后，模型可以创建 `.agent/skills/<name>/skill.toml` 和 `SKILL.md`，用于沉淀新的本地技能。
+启用 `create_skill` 后，模型可以创建带 YAML frontmatter 的 `.agent/skills/<name>/SKILL.md`，用于沉淀新的本地技能。
 启用 `run_subagent` 后，模型可以把聚焦任务委派给一个同步子 agent；子 agent 使用独立 session，默认只拿父 agent 已启用的 `read_file`、`list_dir`、`grep` 和 `todo`。
 
 如需让 agent 写文件或执行 shell 命令，可显式加入：
@@ -235,26 +234,28 @@ E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 
 ## 技能系统
 
-agent 会自动发现 `.agent/skills/*/SKILL.md`，并把启用的技能内容追加到 system prompt。技能用于给模型提供某类任务的稳定工作流、约束和偏好；它不是工具，不会执行代码。
+agent 会自动发现 `.agent/skills/*/SKILL.md`。按照 Skills 规范，启动时只把技能的 `name`、`description`、`trigger_keywords` 和文件路径作为索引注入 system prompt；当用户请求命中某个技能时，模型再读取该技能的 `SKILL.md` 完整内容并按其中说明执行。
+
+`SKILL.md` 顶部必须包含 YAML frontmatter。`name` 只能使用小写字母、数字和连字符，最长 64 个字符，且不能以连字符开头或结尾；`description` 必填，用来判断技能何时触发。
 
 目录示例：
 
 ```text
 .agent/skills/code-review/
-  skill.toml
   SKILL.md
-```
-
-`skill.toml` 可选：
-
-```toml
-name = "code-review"
-description = "Review code changes for bugs, regressions, and missing tests."
 ```
 
 `SKILL.md`：
 
 ```markdown
+---
+name: code-review
+description: Review code changes for bugs, regressions, and missing tests.
+trigger_keywords:
+  - review
+  - code review
+---
+
 # Code Review
 
 Use this skill when the user asks for a review.
@@ -271,7 +272,6 @@ Use this skill when the user asks for a review.
 includeSkills = true
 skillDir = ".agent/skills"
 skills = ["*"]
-maxSkillChars = 8000
 ```
 
 如果只想启用部分技能，可写：

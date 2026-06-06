@@ -12,37 +12,38 @@ function assert(condition, message) {
 }
 
 let root = process.cwd();
-let skillDir = path.join(root, ".agent", "skills", "smoke_skill");
-let manifestFile = path.join(skillDir, "skill.toml");
+let skillDir = path.join(root, ".agent", "skills", "smoke-skill");
 let skillFile = path.join(skillDir, "SKILL.md");
 
 let registry = createRegistry();
 registry.register(createCreateSkillTool(root));
 
 let created = registry.safeCall("create_skill", {
-  name: "smoke_skill",
+  name: "smoke-skill",
   description: "Smoke test skill.",
   content: "# Smoke Skill\n\nUse this only for smoke tests.",
   overwrite: true,
 });
 assert(created.ok === true, "create_skill should create a skill");
-assert(fs.existsSync(manifestFile), "skill.toml should exist");
 assert(fs.existsSync(skillFile), "SKILL.md should exist");
+assert(fs.readFileSync(skillFile).startsWith("---\n"), "SKILL.md should start with YAML frontmatter");
+assert(fs.readFileSync(skillFile).includes("name: \"smoke-skill\""), "SKILL.md should include frontmatter name");
+assert(fs.readFileSync(skillFile).includes("description: \"Smoke test skill.\""), "SKILL.md should include frontmatter description");
 assert(fs.readFileSync(skillFile).includes("Use this only for smoke tests."), "skill content should be written");
 
 let duplicate = registry.safeCall("create_skill", {
-  name: "smoke_skill",
+  name: "smoke-skill",
   description: "Duplicate.",
 });
 assert(duplicate.ok === false, "create_skill should reject duplicates without overwrite");
 
 let invalid = registry.safeCall("create_skill", {
-  name: "../bad",
+  name: "Bad_Name",
 });
 assert(invalid.ok === false, "create_skill should reject unsafe names");
 
 let overwritten = registry.safeCall("create_skill", {
-  name: "smoke_skill",
+  name: "smoke-skill",
   description: "Updated smoke test skill.",
   content: "# Updated Smoke Skill\n\nUpdated content.",
   overwrite: true,
