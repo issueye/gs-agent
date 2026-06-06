@@ -1,6 +1,7 @@
-import { createReadFileTool, createListDirTool, createWriteFileTool } from "@/agent/tools/files";
+import { createReadFileTool, createListDirTool, createWriteFileTool, createAppendFileTool } from "@/agent/tools/files";
 import { createBashTool } from "@/agent/tools/bash";
 import { createGrepTool } from "@/agent/tools/grep";
+import { createTodoTool } from "@/agent/tools/todo";
 
 function includes(list, value) {
   if (!list) {
@@ -30,11 +31,17 @@ export function createCodingTools(cwd, enabledTools) {
   if (includes(enabledTools, "write_file")) {
     tools.push(createWriteFileTool(cwd));
   }
+  if (includes(enabledTools, "append_file")) {
+    tools.push(createAppendFileTool(cwd));
+  }
   if (includes(enabledTools, "bash")) {
     tools.push(createBashTool(cwd));
   }
   if (includes(enabledTools, "grep")) {
     tools.push(createGrepTool(cwd));
+  }
+  if (includes(enabledTools, "todo")) {
+    tools.push(createTodoTool(cwd));
   }
 
   return tools;

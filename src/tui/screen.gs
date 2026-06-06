@@ -31,10 +31,32 @@ export function createScreenRenderer(session) {
 
   function render(frame, nextRows, nextCols) {
     let lines = splitFrame(frame);
+    let limitRows = nextRows;
+    if (limitRows < 1) {
+      limitRows = lines.length;
+    }
+    if (lines.length > limitRows) {
+      lines = lines.slice(0, limitRows);
+    }
     let full = false;
 
     if (!started || nextRows !== rows || nextCols !== cols) {
       full = true;
+    }
+
+    if (session && "renderFrame" in session) {
+      session.renderFrame(lines.join("\n"), {
+        rows: nextRows,
+        cols: nextCols,
+        diff: true,
+        full: full,
+        clip: true,
+      });
+      rows = nextRows;
+      cols = nextCols;
+      previous = lines.slice(0);
+      started = true;
+      return;
     }
 
     let out = "";
@@ -47,6 +69,9 @@ export function createScreenRenderer(session) {
     let max = lines.length;
     if (previous.length > max) {
       max = previous.length;
+    }
+    if (max > limitRows) {
+      max = limitRows;
     }
 
     for (let i = 0; i < max; i = i + 1) {
@@ -77,4 +102,3 @@ export function createScreenRenderer(session) {
     reset: reset,
   };
 }
-

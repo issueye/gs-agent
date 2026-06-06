@@ -120,27 +120,47 @@ export function eventLogFields(event) {
     kind: event.kind,
   };
 
-  if (event.kind === "message" && payload) {
-    fields.role = payload.role;
-    fields.content = shortText(payload.content, 180);
-  } else if (event.kind === "tool_call" && payload) {
-    fields.name = payload.name;
-    fields.id = payload.id;
-    fields.args = payload.args;
-  } else if (event.kind === "tool_result" && payload) {
-    fields.name = payload.name;
-    fields.id = payload.id;
-    fields.content = shortText(payload.content, 220);
-  } else if (event.kind === "turn_start" && payload) {
-    fields.turn = payload.turn;
-  } else if (event.kind === "turn_end" && payload) {
-    fields.turn = payload.turn;
-    fields.stop = payload.stop;
-  } else if (event.kind === "error" && payload) {
-    fields.message = shortText(payload.message, 220);
-  } else if (event.kind === "answer" && payload) {
-    fields.file = payload.file;
-    fields.content = shortText(payload.content, 220);
+  if (!payload) {
+    return fields;
+  }
+
+  // 使用 match 表达式处理不同的事件类型
+  match(event.kind) {
+    // 处理消息事件
+    "message" (val) => {
+      fields.role = payload.role;
+      fields.content = shortText(payload.content, 180);
+    }
+    // 处理工具调用事件
+    "tool_call" (val) => {
+      fields.name = payload.name;
+      fields.id = payload.id;
+      fields.args = payload.args;
+    }
+    // 处理工具调用结果事件
+    "tool_result" (val) => {
+      fields.name = payload.name;
+      fields.id = payload.id;
+      fields.content = shortText(payload.content, 220);
+    }
+    // 处理轮次开始事件
+    "turn_start" (val) => {
+      fields.turn = payload.turn;
+    }
+    // 处理轮次结束事件
+    "turn_end" (val) => {
+      fields.turn = payload.turn;
+      fields.stop = payload.stop;
+    }
+    // 处理错误事件
+    "error" (val) => {
+      fields.message = shortText(payload.message, 220);
+    }
+    // 处理回答事件
+    "answer" (val) => {
+      fields.file = payload.file;
+      fields.content = shortText(payload.content, 220);
+    }
   }
 
   return fields;

@@ -3,7 +3,7 @@ provider = "anthropic"
 system = "You are a concise coding agent. Use tools when useful. Complete the user's requested task and stop when you have a final answer."
 maxTurns = 10
 includeCodingTools = true
-tools = ["read_file", "list_dir", "grep"]
+tools = ["read_file", "list_dir", "grep", "todo"]
 taskFile = "workspace/task.txt"
 
 [llm.anthropic]

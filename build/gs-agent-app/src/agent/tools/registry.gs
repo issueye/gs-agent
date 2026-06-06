@@ -60,6 +60,7 @@ export function createRegistry() {
   }
 
   function safeCall(name, args) {
+    let tool = get(name);
     try {
       return {
         ok: true,
@@ -71,6 +72,7 @@ export function createRegistry() {
         ok: false,
         name: name,
         error: String(err),
+        expectedInputSchema: tool ? tool.inputSchema : undefined,
       };
     }
   }

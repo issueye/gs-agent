@@ -36,7 +36,7 @@ provider = "anthropic"
 taskFile = "workspace/task.txt"
 maxTurns = 10
 includeCodingTools = true
-tools = ["read_file", "list_dir", "grep"]
+tools = ["read_file", "list_dir", "grep", "todo"]
 
 [llm.anthropic]
 apiKey = "sk-..."
@@ -72,6 +72,8 @@ E:\codes\gts\dist\gs.exe --timeout 0 run --tui
 ```powershell
 .\dist\gs-agent.exe --tui
 ```
+
+打包后 `agent.toml` 和 `agent.local.example.toml` 会复制到 `gs-agent.exe` 所在目录；程序默认从自身所在目录读取配置，而不是从启动命令的当前目录读取。
 
 打包：
 
@@ -114,7 +116,7 @@ TUI 状态栏会显示 `log=.agent/logs/latest.log`，排查异常时优先查�
 
 `src/tui/framework.gs` 是可复用入口，聚合了：
 
-- `runTuiApp`：通用 TUI 运行时，负责备用屏、raw input、按键解析、resize、tick、局部刷新和退出清理。
+- `runTuiApp`：项目级 TUI facade，底层使用语言侧 `@std/tui` 托管 raw input、resize、tick、diff 渲染和退出清理，并把事件适配给现有 agent 界面。
 - ANSI/Unicode/颜色工具：`line`、`chars`、`charWidth`、`visibleWidth`、`truncateToWidth`、`color`、`styleText`、`setColorEnabled` 等。
 - widgets：`banner`、`border`、`wrapText`、`joinColumns`、`scrollTitle` 等。
 - components：`Text`、`Input`、`Box`、`Container`、`Spacer`、`Markdown`、`Loading`，用于快速组合 Claude Code 风格的安静、紧凑型终端界面。
@@ -161,16 +163,18 @@ E:\codes\gts\dist\gs.exe --timeout 60s dist programs\gs-tui-test dist\gs-tui-tes
 
 交互测试中可输入文本、方向键、Tab、粘贴、多次调整窗口大小；`Ctrl+L` 清日志，`Ctrl+Q`、`Ctrl+C` 或 `Esc` 退出。
 
-默认只启用只读代码工具：
+默认启用只读代码工具和 todo 任务工具：
 
 ```toml
-tools = ["read_file", "list_dir", "grep"]
+tools = ["read_file", "list_dir", "grep", "todo"]
 ```
+
+启用 `todo` 后，模型可以用单个 `todo` 工具管理 `.agent/todos.json` 中的任务，支持 `add`、`list`、`get`、`update`、`delete` 和 `clear`。任务状态为 `open` 或 `done`，`list` 和 `clear` 可按 `status` 过滤。
 
 如需让 agent 写文件或执行 shell 命令，可显式加入：
 
 ```toml
-tools = ["read_file", "list_dir", "grep", "write_file", "bash"]
+tools = ["read_file", "list_dir", "grep", "write_file", "append_file", "bash", "todo"]
 ```
 
 ## 动态工具
@@ -227,6 +231,7 @@ E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 
 ```powershell
 E:\codes\gts\dist\gs.exe --timeout 20s smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s todo-tool-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s dynamic-tool-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s markdown-stdlib-smoke-test.gs

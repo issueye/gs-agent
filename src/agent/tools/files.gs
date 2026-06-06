@@ -43,7 +43,7 @@ export function createReadFileTool(cwd) {
 export function createWriteFileTool(cwd) {
   return createTool(
     "write_file",
-    "Write a UTF-8 text file inside the workspace.",
+    "Write a UTF-8 text file inside the workspace. Always provide both path and content. For long documents, write the first chunk with write_file, then add more chunks with append_file.",
     {
       type: "object",
       required: ["path", "content"],
@@ -57,6 +57,31 @@ export function createWriteFileTool(cwd) {
       let target = workspacePath(cwd, args.path);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, args.content);
+      return {
+        path: args.path,
+        bytes: args.content.length,
+      };
+    }
+  );
+}
+
+export function createAppendFileTool(cwd) {
+  return createTool(
+    "append_file",
+    "Append UTF-8 text to a file inside the workspace. Use this to continue writing long documents after creating the file with write_file.",
+    {
+      type: "object",
+      required: ["path", "content"],
+      additionalProperties: false,
+      properties: {
+        path: { type: "string", minLength: 1 },
+        content: { type: "string", minLength: 1 },
+      },
+    },
+    function(args) {
+      let target = workspacePath(cwd, args.path);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.appendTextSync(target, args.content);
       return {
         path: args.path,
         bytes: args.content.length,
@@ -93,6 +118,7 @@ export function createFileTools(cwd) {
   return [
     createReadFileTool(cwd),
     createWriteFileTool(cwd),
+    createAppendFileTool(cwd),
     createListDirTool(cwd),
   ];
 }

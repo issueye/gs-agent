@@ -1,7 +1,7 @@
-import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, padRight, repeatText, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
+import { INVERSE, RESET, chars, color, line, padRight, repeatText, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
 import { estimateContextTokens } from "@/agent/core/context";
-import { compactLoading } from "@/tui/loading";
-import { Markdown } from "@/tui/components";
+import { compactLoading, loadingFrame } from "@/tui/loading";
+import { Input, Markdown } from "@/tui/components";
 import { banner, border, clampScroll, joinColumns, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
 
 function safeText(value) {
@@ -308,50 +308,6 @@ function drawTask(state, width, height) {
   }), width, 1, state.taskScroll, splitLines(state.taskText).length);
 }
 
-function takeAroundCursor(text, cursor, width) {
-  if (width < 1) {
-    return "";
-  }
-
-  let list = chars(text);
-  let col = cursor;
-  if (col < 0) {
-    col = 0;
-  }
-  if (col > list.length) {
-    col = list.length;
-  }
-
-  let beforeBudget = Math.floor((width - 1) * 0.62);
-  let afterBudget = width - 1 - beforeBudget;
-  let before = [];
-  let beforeWidth = 0;
-  for (let i = col - 1; i >= 0; i = i - 1) {
-    let ch = list[i];
-    let next = charWidth(ch);
-    if (beforeWidth + next > beforeBudget) {
-      break;
-    }
-    before.unshift(ch);
-    beforeWidth = beforeWidth + next;
-  }
-
-  let after = [];
-  let afterWidth = 0;
-  for (let i = col; i < list.length; i = i + 1) {
-    let ch = list[i];
-    let next = charWidth(ch);
-    if (afterWidth + next > afterBudget) {
-      break;
-    }
-    after.push(ch);
-    afterWidth = afterWidth + next;
-  }
-
-  let result = before.join("") + "|" + after.join("");
-  return line(result, width);
-}
-
 function drawComposer(state, width, height) {
   let lines = splitLines(state.taskText);
   let current = takeLine(lines, state.cursorLine);
@@ -359,15 +315,27 @@ function drawComposer(state, width, height) {
   let hint = "Prompt  line " + String(currentLine) + "/" + String(lines.length) + "  Enter send  Ctrl+R send";
   let out = [];
   out.push(styleText(line(hint, width), { dim: true, fg: "muted" }));
-  out.push(styleText(border(width, "─"), { fg: "border" }));
-
-  // 输入区固定占用整行宽度，避免编辑文本挤到右侧 Timeline 区域。
-  let inputWidth = width - 2;
-  if (inputWidth < 1) {
-    inputWidth = 1;
+  let inputRows = Input({
+    width: width,
+    title: "",
+    value: current,
+    cursor: state.cursorCol,
+    focused: state.focus === "task",
+    prompt: "> ",
+  });
+  if (inputRows.length > 1) {
+    out.push(inputRows[1]);
+  } else {
+    out.push("");
   }
-  out.push("> " + takeAroundCursor(current, state.cursorCol, inputWidth));
   out.push(styleText(border(width, "─"), { fg: "border" }));
+  if (height > 5) {
+    let loading = "";
+    if (state.running) {
+      loading = color(loadingFrame(state.tick || 0), "warning") + " " + styleText("running", { fg: "muted" });
+    }
+    out.push(line(loading, width));
+  }
 
   if (height > 4) {
     let summary = "Ctrl+C to quit  chars=" + String(chars(state.taskText).length) + "  width=" + String(visibleWidth(current));
@@ -397,7 +365,7 @@ function pushWrappedWithPrefix(out, prefix, text, width, style) {
     if (i > 0) {
       mark = repeatText(" ", visibleWidth(prefix));
     }
-    let row = mark + rows[i];
+    let row = styleText(mark, { fg: "border" }) + rows[i];
     if (style) {
       row = styleText(row, style);
     }
@@ -417,17 +385,12 @@ function compactJson(value) {
 }
 
 function transcriptContentWidth(width) {
-  let max = 88;
-  let gutter = 8;
-  let available = width - gutter;
-  if (available < 32) {
-    available = width - 1;
-  }
+  let available = Math.floor(width * 0.8);
   if (available < 20) {
     available = 20;
   }
-  if (available > max) {
-    return max;
+  if (available > width) {
+    available = width;
   }
   return available;
 }
@@ -493,7 +456,7 @@ function transcriptRows(state, width) {
     }
 
     if (event.kind === "tool_result") {
-      pushWrappedWithPrefix(out, "  | ", truncateToWidth(toolResultText(payload.content), width * 2), width, { dim: true, fg: "muted" });
+      pushWrappedWithPrefix(out, "  | ", styleText(truncateToWidth(toolResultText(payload.content), width * 2), { fg: "muted" }), width, undefined);
       continue;
     }
 
@@ -659,56 +622,76 @@ function addScrollbar(rows, width, headerRows, offset, total) {
   return out;
 }
 
-// 渲染当前逻辑屏幕，实际输出由 screen renderer 做局部刷新。
-export function renderFrame(state) {
+function viewportSize(state) {
   let cols = state.cols;
   let rows = state.rows;
+  if ("safeCols" in state) {
+    cols = state.safeCols;
+  }
   if (cols < 40) {
     cols = 40;
   }
   if (rows < 12) {
     rows = 12;
   }
+  return {
+    cols: cols,
+    rows: rows,
+  };
+}
 
-  let welcome = welcomePanel(state, cols);
-  let header = line(configLabel(state), cols);
-  let status = line(statusText(state), cols);
-  let footer = line("Ctrl+S Save  Ctrl+O Load Session  Tab Focus  Arrows/Page Scroll  Ctrl+C Quit", cols);
-  let composerHeight = 5;
-  let available = rows - welcome.length - composerHeight - 4;
-  if (available < 7) {
-    available = 7;
+export function renderContentFrame(state) {
+  let size = viewportSize(state);
+  let cols = size.cols;
+  let rows = size.rows;
+  let hasContentRows = "contentRows" in state;
+  if (hasContentRows) {
+    rows = state.contentRows;
   }
-  let transcriptHeight = available;
-  if (transcriptHeight < 4) {
-    transcriptHeight = 4;
+
+  let composerHeight = 6;
+  let transcriptHeight = rows;
+  if (!hasContentRows) {
+    transcriptHeight = rows - composerHeight;
+  }
+  if (transcriptHeight < 1) {
+    transcriptHeight = 1;
   }
   let transcript = drawTranscript(state, cols, transcriptHeight);
-  let composer = drawComposer(state, cols, composerHeight);
 
   let lines = [];
-  for (let row of welcome) {
-    lines.push(row);
-  }
-  lines.push(header);
-  lines.push(status);
-  lines.push(border(cols));
   let detailsStart = lines.length + 1;
   for (let row of transcript) {
     lines.push(row);
   }
-  lines.push(border(cols));
-  let composerStart = lines.length + 1;
-  for (let row of composer) {
-    lines.push(row);
-  }
-  lines.push(footer);
 
   state.layout = {
-    task: { row: composerStart, col: 1, height: composerHeight, width: cols },
     details: { row: detailsStart, col: 1, height: transcriptHeight, width: cols },
-    composer: { row: composerStart, col: 1, height: composerHeight, width: cols },
   };
 
   return lines.join("\n");
+}
+
+export function renderComposerFrame(state) {
+  let size = viewportSize(state);
+  let cols = size.cols;
+  let composerHeight = 6;
+  let start = size.rows - composerHeight + 1;
+  if (start < 1) {
+    start = 1;
+  }
+  state.layout = state.layout || {};
+  state.layout.task = { row: start, col: 1, height: composerHeight, width: cols };
+  state.layout.composer = { row: start, col: 1, height: composerHeight, width: cols };
+  return drawComposer(state, cols, composerHeight).join("\n");
+}
+
+// 渲染当前逻辑屏幕，保留给 smoke test 和旧调用方；实际 agent TUI 会拆分内容区和底部输入区。
+export function renderFrame(state) {
+  let content = renderContentFrame(state);
+  let composer = renderComposerFrame(state);
+  if (content === "") {
+    return composer;
+  }
+  return content + "\n" + composer;
 }

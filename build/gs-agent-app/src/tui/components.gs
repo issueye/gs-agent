@@ -1,8 +1,9 @@
-import { BOLD, DIM, INVERSE, RESET, charWidth, chars, color, line, repeatText, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
+import { chars, color, line, repeatText, stripAnsi, styleText, truncateToWidth, visibleWidth } from "@/tui/ansi";
 import { loadingFrame } from "@/tui/loading";
-import { border, clampScroll, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
+import { clampScroll, renderLines, scrollTitle, splitLines, takeLine, wrapText } from "@/tui/widgets";
 
 let stdMarkdown = require("@std/markdown");
+let stdTui = require("@std/tui");
 
 function optionText(options, name, fallback) {
   if (options && name in options) {
@@ -31,63 +32,6 @@ function emptyLines(width, height) {
     out.push(line("", width));
   }
   return out;
-}
-
-function splitAtChar(text, index) {
-  let list = chars(text);
-  let col = index;
-  if (col < 0) {
-    col = 0;
-  }
-  if (col > list.length) {
-    col = list.length;
-  }
-  return {
-    before: list.slice(0, col).join(""),
-    after: list.slice(col).join(""),
-  };
-}
-
-function cropAroundCursor(text, cursor, width) {
-  if (width < 1) {
-    return "";
-  }
-  let list = chars(text);
-  let col = cursor;
-  if (col < 0) {
-    col = 0;
-  }
-  if (col > list.length) {
-    col = list.length;
-  }
-
-  let beforeBudget = Math.floor((width - 1) * 0.62);
-  let afterBudget = width - 1 - beforeBudget;
-  let before = [];
-  let beforeWidth = 0;
-  for (let i = col - 1; i >= 0; i = i - 1) {
-    let ch = list[i];
-    let next = charWidth(ch);
-    if (beforeWidth + next > beforeBudget) {
-      break;
-    }
-    before.unshift(ch);
-    beforeWidth = beforeWidth + next;
-  }
-
-  let after = [];
-  let afterWidth = 0;
-  for (let i = col; i < list.length; i = i + 1) {
-    let ch = list[i];
-    let next = charWidth(ch);
-    if (afterWidth + next > afterBudget) {
-      break;
-    }
-    after.push(ch);
-    afterWidth = afterWidth + next;
-  }
-
-  return line(before.join("") + INVERSE + " " + RESET + after.join(""), width);
 }
 
 function alignLine(row, width, align) {
@@ -250,27 +194,16 @@ export function Input(options) {
   let focused = optionBool(options, "focused", true);
   let meta = optionText(options, "meta", "");
   let prompt = optionText(options, "prompt", "> ");
-
-  let inputWidth = width - visibleWidth(prompt);
-  if (inputWidth < 1) {
-    inputWidth = 1;
-  }
-  let shown = "";
-  if (value === "" && placeholder !== "") {
-    shown = styleText(line(placeholder, inputWidth), { dim: true, fg: "muted" });
-  } else if (focused) {
-    shown = cropAroundCursor(value, cursor, inputWidth);
-  } else {
-    shown = line(value, inputWidth);
-  }
-
-  let out = [];
-  out.push(styleText(line(title, width), { bold: true, fg: "accent" }));
-  out.push(prompt + shown);
-  if (meta !== "") {
-    out.push(styleText(line(meta, width), { dim: true, fg: "muted" }));
-  }
-  return out;
+  return String(stdTui.input({
+    width: width,
+    title: title,
+    value: value,
+    cursor: cursor,
+    placeholder: placeholder,
+    focused: focused,
+    meta: meta,
+    prompt: prompt,
+  })).split("\n");
 }
 
 export function Loading(options) {
@@ -346,7 +279,7 @@ function styledInline(node) {
     return "";
   }
   if (node.type === "text") {
-    return node.text || "";
+    return styleText(node.text || "", { fg: "text" });
   }
   if (node.type === "code") {
     return styleText(" " + (node.text || "") + " ", { inverse: true });
@@ -517,7 +450,13 @@ function tableBorder(widths, width, left, join, right) {
 function tableLine(cells, widths, width) {
   let row = "│";
   for (let i = 0; i < widths.length; i = i + 1) {
-    row = row + " " + line(truncateToWidth(takeLine(cells, i), widths[i]), widths[i]) + " │";
+    let cell = truncateToWidth(takeLine(cells, i), widths[i]);
+    let rendered = renderInlineMarkdown(cell);
+    let padding = widths[i] - visibleWidth(stripAnsi(rendered));
+    if (padding < 0) {
+      padding = 0;
+    }
+    row = row + " " + rendered + repeatText(" ", padding) + " │";
   }
   return line(truncateToWidth(row, width), width);
 }

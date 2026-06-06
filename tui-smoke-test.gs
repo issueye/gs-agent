@@ -1,6 +1,7 @@
 import { parseKeys } from "@/tui/keys";
 import { charWidth, stripAnsi, visibleWidth } from "@/tui/ansi";
-import { renderFrame } from "@/tui/renderer";
+import { Markdown } from "@/tui/components";
+import { renderComposerFrame, renderContentFrame, renderFrame } from "@/tui/renderer";
 import { createScreenRenderer } from "@/tui/screen";
 import { loadingFrame, loadingText } from "@/tui/loading";
 import { startNewSession } from "@/tui/app";
@@ -129,25 +130,33 @@ function copyState(base) {
 }
 
 let frame = renderFrame(state);
-assert(frame.includes("gs-agent"), "header");
-assert(frame.includes("/\\_/\\"), "pixel pet header");
-assert(frame.includes("/|___|\\"), "pixel pet body");
-assert(frame.includes("model=deepseek-v4-flash"), "compact header model");
+assert(frame.split("\n").length <= state.rows, "frame fits terminal rows");
+let contentOnlyFrame = renderContentFrame(state);
+let composerOnlyFrame = renderComposerFrame(state);
+assert(!contentOnlyFrame.includes("Prompt"), "content frame excludes composer");
+assert(!contentOnlyFrame.includes("> 读取"), "content frame excludes input row");
+assert(composerOnlyFrame.includes("Prompt"), "composer frame includes prompt");
+assert(composerOnlyFrame.includes("> "), "composer frame includes input row");
+assert(composerOnlyFrame.split("\n").length === 6, "composer has loading row");
+let baseFrameLines = frame.split("\n");
+let promptLineIndex = -1;
+for (let i = 0; i < baseFrameLines.length; i = i + 1) {
+  if (baseFrameLines[i].startsWith("> ")) {
+    promptLineIndex = i;
+  }
+}
+assert(promptLineIndex >= state.rows - 6, "composer fixed at bottom");
+assert(!frame.includes("/\\_/\\"), "no fixed header in scrollback");
 let tickState = copyState(state);
 tickState.tick = 2;
 let tickFrame = renderFrame(tickState);
-assert(tickFrame !== frame, "cat header animates");
+assert(tickFrame === frame, "no fixed animated header");
 assert(frame.includes("read_file"), "tool event");
 assert(frame.includes("Transcript"), "transcript");
-assert(frame.includes("#") || frame.includes("|"), "scrollbar render");
 assert(frame.includes("Prompt"), "composer");
 assert(frame.includes("Enter send"), "enter send hint");
 assert(frame.includes("Ctrl+C to quit"), "composer bottom hint");
 assert(frame.includes("读取 README.md 并总结"), "zh render");
-assert(frame.includes("answer=ready"), "answer status");
-assert(frame.includes("ctx="), "context usage status");
-assert(frame.includes("/258k"), "context threshold status");
-assert(frame.includes("%"), "context percent status");
 assert(frame.includes("最终答案"), "answer render");
 let markdownState = copyState(state);
 markdownState.events = [
@@ -164,6 +173,14 @@ let markdownFrame = renderFrame(markdownState);
 assert(markdownFrame.includes("\x1b["), "details markdown styled");
 assert(markdownFrame.includes("python"), "details markdown code language");
 assert(markdownState.transcriptCache.rows.length > 0, "transcript cache populated");
+assert(markdownState.transcriptCache.rows.join("\n").includes("\x1b["), "transcript markdown color kept");
+assert(!stripAnsi(markdownFrame).includes("0m"), "code block ansi reset hidden");
+
+let runningState = copyState(state);
+runningState.running = true;
+runningState.tick = 2;
+let runningComposer = renderComposerFrame(runningState);
+assert(stripAnsi(runningComposer).includes("| running"), "composer loading animation");
 
 let escapedState = copyState(state);
 escapedState.events = [
@@ -192,6 +209,14 @@ assert(escapedFrame.includes("标题"), "assistant json string decoded");
 assert(!escapedRows.includes("{\"ok\":true"), "tool result json hidden");
 assert(!escapedRows.includes("\\n"), "escaped newline hidden");
 
+let inlineTableRows = stripAnsi(Markdown({
+  width: 80,
+  text: "| Name | Value |\n| --- | --- |\n| **alpha** | `beta` |",
+}).join("\n"));
+assert(!inlineTableRows.includes("**alpha**"), "table cell bold marker hidden");
+assert(inlineTableRows.includes("alpha"), "table cell bold text kept");
+assert(!inlineTableRows.includes("`beta`"), "table cell code marker hidden");
+
 let wideTableState = copyState(state);
 wideTableState.cols = 140;
 wideTableState.events = [
@@ -204,6 +229,7 @@ wideTableState.events = [
   },
 ];
 wideTableState.transcriptCache = null;
+wideTableState.safeCols = 138;
 renderFrame(wideTableState);
 let maxWideRow = 0;
 for (let row of wideTableState.transcriptCache.rows) {
@@ -212,7 +238,17 @@ for (let row of wideTableState.transcriptCache.rows) {
     maxWideRow = cleanWidth;
   }
 }
-assert(maxWideRow <= 92, "transcript content width capped");
+assert(maxWideRow <= Math.floor(wideTableState.safeCols * 0.8) + 4, "transcript content width capped");
+assert(maxWideRow > 92, "transcript content uses wide viewport");
+let safeFrame = renderFrame(wideTableState);
+let maxFrameRow = 0;
+for (let row of safeFrame.split("\n")) {
+  let cleanWidth = visibleWidth(stripAnsi(row));
+  if (cleanWidth > maxFrameRow) {
+    maxFrameRow = cleanWidth;
+  }
+}
+assert(maxFrameRow <= wideTableState.safeCols, "frame leaves right safety columns");
 
 let duplicateState = copyState(state);
 duplicateState.events = [
@@ -314,6 +350,23 @@ assert(writes[0].includes("\x1b[2J"), "first full clear");
 assert(!writes[1].includes("\x1b[2J"), "second no full clear");
 assert(writes[1].includes("\x1b[2;1H"), "changed row move");
 assert(!writes[1].includes("\x1b[1;1H"), "unchanged row skipped");
+writes = [];
+screen.reset();
+screen.render("a\nb\nc\nd", 3, 10);
+assert(!writes[0].includes("\x1b[4;1H"), "screen clips rows to viewport");
+let nativeCalls = [];
+let nativeSession = {
+  renderFrame: function(frame, options) {
+    nativeCalls.push({ frame: frame, options: options });
+  },
+};
+let nativeScreen = createScreenRenderer(nativeSession);
+nativeScreen.render("a\nb\nc\nd", 3, 10);
+nativeScreen.render("a\nB\nc", 3, 10);
+assert(nativeCalls.length === 2, "screen uses native renderFrame");
+assert(nativeCalls[0].frame === "a\nb\nc", "native renderFrame receives clipped rows");
+assert(nativeCalls[0].options.full === true, "native renderFrame first call full");
+assert(nativeCalls[1].options.full === false, "native renderFrame second call diff");
 
 let tempDir = path.join(process.cwd(), ".agent", "tui-smoke-new-session");
 fs.mkdirSync(tempDir, { recursive: true });

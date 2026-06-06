@@ -1,5 +1,6 @@
 // ANSI 小工具集中放在这里，避免界面代码里到处散落转义序列。
 let stdText = require("@std/text");
+let stdTui = require("@std/tui");
 
 export let ESC = "\x1b";
 export let RESET = "\x1b[0m";
@@ -57,7 +58,7 @@ export function fg(color) {
 }
 
 export function colorCode(nameOrCode) {
-  if (typeof nameOrCode === "number") {
+  if (typeof nameOrCode === "NUMBER") {
     return nameOrCode;
   }
   let name = String(nameOrCode || "");
@@ -74,36 +75,23 @@ export function color(text, nameOrCode) {
   if (!colorsEnabled) {
     return String(text);
   }
-  return fg(colorCode(nameOrCode)) + String(text) + RESET;
+  return stdTui.style(String(text), { fg: String(nameOrCode || "text") });
 }
 
 export function styleText(text, styles) {
   if (!colorsEnabled) {
     return String(text);
   }
-  let codes = "";
   if (!styles) {
     return String(text);
   }
-  if (styles.bold) {
-    codes = codes + BOLD;
-  }
-  if (styles.dim) {
-    codes = codes + DIM;
-  }
-  if (styles.inverse) {
-    codes = codes + INVERSE;
-  }
-  if (styles.underline) {
-    codes = codes + UNDERLINE;
-  }
-  if (styles.fg) {
-    codes = codes + fg(colorCode(styles.fg));
-  }
-  if (codes === "") {
-    return String(text);
-  }
-  return codes + String(text) + RESET;
+  return stdTui.style(String(text), {
+    bold: !!styles.bold,
+    dim: !!styles.dim,
+    inverse: !!styles.inverse,
+    underline: !!styles.underline,
+    fg: String(styles.fg || ""),
+  });
 }
 
 export function clearScreen() {
@@ -124,6 +112,14 @@ export function leaveAlternateScreen() {
 
 export function moveTo(row, col) {
   return "\x1b[" + String(row) + ";" + String(col) + "H";
+}
+
+export function setScrollRegion(top, bottom) {
+  return "\x1b[" + String(top) + ";" + String(bottom) + "r";
+}
+
+export function resetScrollRegion() {
+  return "\x1b[r";
 }
 
 export function hideCursor() {
@@ -161,9 +157,8 @@ export function repeatText(text, count) {
   return out;
 }
 
-// 第一版只去掉常见 CSI 序列，后续可扩展 OSC/APC。
 export function stripAnsi(text) {
-  return stdText.stripAnsi(text);
+  return stdTui.stripAnsi(text);
 }
 
 export function charWidth(ch) {
@@ -175,35 +170,11 @@ export function chars(text) {
 }
 
 export function visibleWidth(text) {
-  return stdText.width(text);
+  return stdTui.width(text);
 }
 
 export function truncateToWidth(text, width) {
-  let source = String(text);
-  let out = "";
-  let used = 0;
-  let i = 0;
-  while (i < source.length) {
-    let rest = source.slice(i);
-    if (rest.startsWith(ESC + "[")) {
-      let end = rest.indexOf("m");
-      if (end >= 0) {
-        out = out + rest.slice(0, end + 1);
-        i = i + end + 1;
-        continue;
-      }
-    }
-
-    let ch = stdText.chars(rest)[0];
-    let next = stdText.width(ch);
-    if (used + next > width) {
-      break;
-    }
-    out = out + ch;
-    used = used + next;
-    i = i + ch.length;
-  }
-  return out;
+  return stdTui.truncate(String(text), width);
 }
 
 export function padRight(text, width) {

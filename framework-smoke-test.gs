@@ -1,5 +1,7 @@
 import { Box, Color, Container, Input, Loading, Markdown, Spacer, Text, border, chars, color, colorCode, isColorEnabled, line, runTuiApp, setColorEnabled, stripAnsi, styleText, visibleWidth, wrapText } from "@/tui/framework";
 
+let nativeTui = require("@std/tui");
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
@@ -7,23 +9,6 @@ function assert(condition, message) {
 }
 
 let writes = [];
-let startedConfig = undefined;
-let callbacks = {};
-let fakeSession = {
-  setTitle: function(title) {
-    writes.push("title:" + title);
-  },
-  write: function(text) {
-    writes.push(text);
-  },
-  stop: function() {
-    writes.push("stop");
-  },
-  drainInput: function(ms, count) {
-    writes.push("drain:" + String(ms) + ":" + String(count));
-  },
-};
-
 let fakeTerminal = {
   size: function() {
     return { cols: 40, rows: 12 };
@@ -31,26 +16,14 @@ let fakeTerminal = {
   isTTY: function(name) {
     return true;
   },
-  start: function(config) {
-    startedConfig = config;
-    callbacks = config;
-    return fakeSession;
+  setTitle: function(title) {
+    writes.push("title:" + title);
   },
-};
-
-let fakeTimers = {
-  setInterval: function(fn, ms) {
-    return 1;
+  write: function(text) {
+    writes.push(text);
   },
-  clearInterval: function(id) {
-    writes.push("clear:" + String(id));
-  },
-  sleep: function(ms) {
-    if (callbacks.onInput) {
-      callbacks.onInput("好");
-      callbacks.onInput("\x03");
-      callbacks.onInput = undefined;
-    }
+  renderFrame: function(frame, options) {
+    writes.push(frame);
   },
 };
 
@@ -58,14 +31,20 @@ let state = runTuiApp({
   name: "framework smoke",
   title: "framework smoke",
   terminal: fakeTerminal,
-  timers: fakeTimers,
   tickMs: 10,
+  testMessages: [
+    nativeTui.text("好"),
+    { type: "raw", raw: "\x1b[<65;10;2M" },
+    nativeTui.tick(),
+    nativeTui.key("ctrl+c", "\x03"),
+  ],
   createState: function(size) {
     return {
       cols: size.cols,
       rows: size.rows,
       tick: 0,
       text: "",
+      wheelDown: false,
       started: false,
       stopped: false,
       shouldExit: false,
@@ -81,6 +60,9 @@ let state = runTuiApp({
     if (key.id === "text") {
       state.text = state.text + key.text;
     }
+    if (key.id === "mouse" && key.action === "wheelDown") {
+      state.wheelDown = true;
+    }
     if (key.id === "ctrl+c") {
       state.shouldExit = true;
     }
@@ -93,21 +75,16 @@ let state = runTuiApp({
   },
 });
 
-assert(startedConfig.raw === true, "raw input enabled");
-assert(startedConfig.bracketedPaste === true, "paste enabled");
-assert(writes.join("\n").includes("\x1b[?1006h"), "mouse enabled");
-assert(!writes.join("\n").includes("\x1b[?1002h"), "drag mouse tracking disabled by default");
-assert(writes.join("\n").includes("\x1b[?1006l"), "mouse disabled");
 assert(state.started, "onStart");
 assert(state.stopped, "onStop");
 assert(state.text === "好", "unicode key through runtime");
+assert(state.wheelDown, "mouse wheel through runtime");
+assert(state.tick === 1, "tick through runtime");
 assert(chars(state.text).length === 1, "unicode char length");
 assert(wrapText("你好世界", 4).length === 2, "wrap text width");
-assert(writes.join("\n").includes("text=好"), "rendered typed text");
+assert(writes.join("\n").includes("title:framework smoke"), "title set");
 
 writes = [];
-startedConfig = undefined;
-callbacks = {};
 let fatalCalled = false;
 let renderFailed = false;
 try {
@@ -115,7 +92,7 @@ try {
     name: "framework failure smoke",
     title: "framework failure smoke",
     terminal: fakeTerminal,
-    timers: fakeTimers,
+    testMessages: [nativeTui.tick()],
     tickMs: 0,
     createState: function(size) {
       return {
@@ -136,28 +113,13 @@ try {
 }
 assert(renderFailed, "render error rethrown");
 assert(fatalCalled, "render error onFatal");
-assert(writes.join("\n").includes("\x1b[?1006l"), "render error disables mouse");
-assert(writes.join("\n").includes("\x1b[?1049l"), "render error leaves alternate screen");
-assert(writes.join("\n").includes("drain:80:10"), "render error drains input");
-assert(writes.join("\n").includes("stop"), "render error stops session");
 
 writes = [];
-startedConfig = undefined;
-callbacks = {};
 let plainState = runTuiApp({
   name: "framework plain screen smoke",
   title: "framework plain screen smoke",
   terminal: fakeTerminal,
-  timers: {
-    setInterval: fakeTimers.setInterval,
-    clearInterval: fakeTimers.clearInterval,
-    sleep: function(ms) {
-      if (callbacks.onInput) {
-        callbacks.onInput("\x03");
-        callbacks.onInput = undefined;
-      }
-    },
-  },
+  testMessages: [nativeTui.key("ctrl+c", "\x03")],
   alternateScreen: false,
   mouse: false,
   tickMs: 0,
@@ -178,10 +140,8 @@ let plainState = runTuiApp({
   },
 });
 let plainWrites = writes.join("\n");
-assert(!plainWrites.includes("\x1b[?1049h"), "plain screen does not enter alternate screen");
-assert(!plainWrites.includes("\x1b[?1006h"), "plain screen does not enable mouse");
-assert(!plainWrites.includes("\x1b[?1049l"), "plain screen does not leave alternate screen");
-assert(plainWrites.includes("\x1b[2J"), "plain screen clears on exit");
+assert(plainWrites.includes("title:framework plain screen smoke"), "plain screen title set");
+assert(plainState.shouldExit, "plain screen exits through key");
 
 let box = Box({
   width: 20,
@@ -211,6 +171,7 @@ let md = Markdown({
 assert(md.length === 5, "markdown height");
 assert(stripAnsi(md.join("\n")).includes("标题"), "markdown heading");
 assert(stripAnsi(md.join("\n")).includes("重点"), "markdown bold");
+assert(md.join("\n").includes("\x1b["), "markdown color kept");
 
 let mdTable = Markdown({
   width: 100,
@@ -250,6 +211,11 @@ let text = Text({
 });
 assert(text.length === 2, "text wraps cjk");
 assert(stripAnsi(text[0]) === "你好", "text first wrapped line");
+
+let coloredWrap = wrapText(styleText("abcdef", { fg: "success" }), 3);
+assert(coloredWrap.length === 2, "colored text wraps");
+assert(coloredWrap[0].includes("\x1b["), "wrapped color kept");
+assert(stripAnsi(coloredWrap.join("")) === "abcdef", "wrapped color text kept");
 
 let scrolled = Text({
   width: 10,

@@ -33,6 +33,9 @@ if (!$SkipSmoke) {
   Write-Host "==> running smoke tests"
   & $GsExe --timeout 20s smoke-test.gs
   & $GsExe --timeout 20s provider-test.gs
+  & $GsExe --timeout 20s app-root-smoke-test.gs
+  & $GsExe --timeout 20s file-tools-smoke-test.gs
+  & $GsExe --timeout 20s todo-tool-smoke-test.gs
   & $GsExe --timeout 20s dynamic-tool-smoke-test.gs
   & $GsExe --timeout 20s tui-smoke-test.gs
   & $GsExe --timeout 20s framework-smoke-test.gs
@@ -78,7 +81,17 @@ if (!(Test-Path -LiteralPath $Output)) {
   throw "Package output was not created: $Output"
 }
 
+$OutputDir = Split-Path -Parent $Output
+foreach ($ConfigFile in @("agent.toml", "agent.local.example.toml")) {
+  $ConfigSource = Join-Path $ProjectRoot $ConfigFile
+  $ConfigTarget = Join-Path $OutputDir $ConfigFile
+  if ([System.IO.Path]::GetFullPath($ConfigSource) -ne [System.IO.Path]::GetFullPath($ConfigTarget)) {
+    Copy-Item -LiteralPath $ConfigSource -Destination $ConfigTarget -Force
+  }
+}
+
 $Item = Get-Item -LiteralPath $Output
 Write-Host "==> packaged: $($Item.FullName)"
+Write-Host "==> config:   $(Join-Path $OutputDir "agent.toml")"
 Write-Host "==> size:     $($Item.Length) bytes"
 Write-Host "==> updated:  $($Item.LastWriteTime)"

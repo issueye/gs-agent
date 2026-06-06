@@ -1,4 +1,4 @@
-import { charWidth, chars, color, line, repeatText, styleText } from "@/tui/ansi";
+import { ESC, RESET, charWidth, chars, color, line, repeatText, styleText } from "@/tui/ansi";
 
 export function splitLines(text) {
   return String(text || "").replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
@@ -33,20 +33,45 @@ export function wrapTextLine(text, width) {
     return [""];
   }
 
-  let list = chars(text);
+  let source = String(text || "");
   let rows = [];
   let current = "";
+  let activeStyle = "";
   let used = 0;
+  let i = 0;
 
-  for (let ch of list) {
+  while (i < source.length) {
+    let rest = source.slice(i);
+    if (rest.startsWith(ESC + "[")) {
+      let end = rest.indexOf("m");
+      if (end >= 0) {
+        let seq = rest.slice(0, end + 1);
+        current = current + seq;
+        if (seq.endsWith("[0m")) {
+          activeStyle = "";
+        } else {
+          activeStyle = activeStyle + seq;
+        }
+        i = i + end + 1;
+        continue;
+      }
+    }
+
+    let ch = chars(rest)[0];
     let next = charWidth(ch);
     if (used > 0 && used + next > width) {
-      rows.push(current);
-      current = "";
+      if (activeStyle !== "") {
+        rows.push(current + RESET);
+        current = activeStyle;
+      } else {
+        rows.push(current);
+        current = "";
+      }
       used = 0;
     }
     current = current + ch;
     used = used + next;
+    i = i + ch.length;
   }
 
   rows.push(current);

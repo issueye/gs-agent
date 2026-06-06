@@ -8,6 +8,38 @@ let path = require("@std/path");
 let process = require("@std/process");
 let toml = require("@std/toml");
 
+export function appRootForLaunch(execPath, argv, cwd) {
+  if (!cwd) {
+    cwd = ".";
+  }
+  if (!execPath) {
+    return cwd;
+  }
+
+  let value = String(execPath);
+  let slash = value.lastIndexOf("/");
+  let backslash = value.lastIndexOf("\\");
+  if (backslash > slash) {
+    slash = backslash;
+  }
+  let name = value;
+  let dir = ".";
+  if (slash >= 0) {
+    name = value.slice(slash + 1);
+    dir = value.slice(0, slash);
+  }
+  name = name.toLowerCase();
+  if (name === "gs.exe" || name === "gs") {
+    return cwd;
+  }
+
+  return dir;
+}
+
+function defaultAppRoot() {
+  return appRootForLaunch(process.execPath(), process.argv, process.cwd());
+}
+
 // 默认配置面向真实模型运行；agent.local.toml 可覆盖其中的密钥和模型参数。
 function defaultAgentConfig() {
   return {
@@ -15,7 +47,7 @@ function defaultAgentConfig() {
     system: "You are a concise coding agent. Use tools when useful. Complete the user's requested task and stop when you have a final answer.",
     maxTurns: 10,
     includeCodingTools: true,
-    tools: ["read_file", "list_dir", "grep"],
+    tools: ["read_file", "list_dir", "grep", "todo"],
     taskFile: "workspace/task.txt",
   };
 }
@@ -161,7 +193,7 @@ export function taskPrompt(root, taskFile, taskText) {
 // 应用级装配点：配置、工具、provider、session 路径和 workspace 都在这里连起来。
 export function loadAgentApp(root) {
   if (!root) {
-    root = process.cwd();
+    root = defaultAppRoot();
   }
 
   let config = readConfig(root);
@@ -321,7 +353,7 @@ export function runAgentTurn(options) {
 
 // 保持现有命令行入口行为不变。
 export function runAgentApp() {
-  let app = loadAgentApp(process.cwd());
+  let app = loadAgentApp();
   return runAgentTask({
     app: app,
     taskText: readTaskText(app.root, app.taskFile),

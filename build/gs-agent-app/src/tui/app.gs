@@ -2,11 +2,11 @@ import { loadAgentApp, readTaskText, runAgentTurn, writeTaskText } from "@/agent
 import { createRunLogger, eventLogFields } from "@/agent/log";
 import { createJSONLSession } from "@/agent/session/jsonl";
 import { charWidth, chars } from "@/tui/ansi";
-import { renderFrame } from "@/tui/renderer";
+import { renderComposerFrame, renderContentFrame } from "@/tui/renderer";
 import { runTuiApp } from "@/tui/runtime";
 
 let fs = require("@std/fs");
-let process = require("@std/process");
+let timers = require("@std/timers");
 
 function clamp(value, min, max) {
   if (value < min) {
@@ -96,7 +96,11 @@ function sanitizeError(err) {
 }
 
 function render(state) {
-  return renderFrame(state);
+  return renderContentFrame(state);
+}
+
+function renderFixedBottom(state) {
+  return renderComposerFrame(state);
 }
 
 function saveTask(state) {
@@ -210,30 +214,7 @@ function clearInput(state) {
   state.dirty = false;
 }
 
-function sendMessage(state, ctx) {
-  if (state.running) {
-    state.error = "already running";
-    return;
-  }
-
-  if (state.taskText.trim() === "") {
-    state.error = "task is empty";
-    return;
-  }
-
-  let input = state.taskText.trim();
-  saveTask(state);
-  clearInput(state);
-  state.running = true;
-  state.error = "";
-  state.detailScroll = 0;
-  state.logger.info("message send requested", {
-    taskFile: state.app.taskFile,
-    chars: chars(input).length,
-    messages: state.messages.length,
-  });
-  ctx.render();
-
+function runMessageTurn(state, ctx, input) {
   try {
     let result = runAgentTurn({
       app: state.app,
@@ -269,6 +250,36 @@ function sendMessage(state, ctx) {
   }
 
   state.running = false;
+  ctx.render();
+}
+
+function sendMessage(state, ctx) {
+  if (state.running) {
+    state.error = "already running";
+    return;
+  }
+
+  if (state.taskText.trim() === "") {
+    state.error = "task is empty";
+    return;
+  }
+
+  let input = state.taskText.trim();
+  saveTask(state);
+  clearInput(state);
+  state.running = true;
+  state.error = "";
+  state.detailScroll = 0;
+  state.tick = 0;
+  state.logger.info("message send requested", {
+    taskFile: state.app.taskFile,
+    chars: chars(input).length,
+    messages: state.messages.length,
+  });
+  ctx.render();
+  timers.setTimeout(function() {
+    runMessageTurn(state, ctx, input);
+  }, 0);
 }
 
 function currentTaskLines(state) {
@@ -476,17 +487,12 @@ function estimateTranscriptLines(state, width) {
 }
 
 function transcriptMeasureWidth(width) {
-  let max = 88;
-  let gutter = 8;
-  let available = width - gutter;
-  if (available < 32) {
-    available = width - 1;
-  }
+  let available = Math.floor(width * 0.8);
   if (available < 20) {
     available = 20;
   }
-  if (available > max) {
-    return max;
+  if (available > width) {
+    available = width;
   }
   return available;
 }
@@ -505,7 +511,7 @@ function detailBodyHeight(state) {
   if (state.cols < 76) {
     bannerHeight = 1;
   }
-  let composerHeight = 5;
+  let composerHeight = 6;
   let available = state.rows - bannerHeight - composerHeight - 6;
   if (available < 7) {
     available = 7;
@@ -702,8 +708,6 @@ function handleMouse(state, item) {
 
 function nextFocus(state) {
   if (state.focus === "task") {
-    state.focus = "timeline";
-  } else if (state.focus === "timeline") {
     state.focus = "details";
   } else {
     state.focus = "task";
@@ -766,6 +770,10 @@ function handleKey(state, item, ctx) {
       backspace(state);
     } else if (item.id === "up" || item.id === "down" || item.id === "left" || item.id === "right" || item.id === "home" || item.id === "end") {
       moveCursor(state, item.id);
+    } else if (item.id === "pageUp") {
+      moveDetails(state, -8);
+    } else if (item.id === "pageDown") {
+      moveDetails(state, 8);
     }
     return;
   }
@@ -797,17 +805,23 @@ function handleKey(state, item, ctx) {
 }
 
 export function runAgentTui() {
-  let app = loadAgentApp(process.cwd());
+  let app = loadAgentApp();
   let state = runTuiApp({
     name: "gs-agent tui",
     title: "gs-agent tui",
-    alternateScreen: false,
-    mouse: false,
+    alternateScreen: true,
+    mouse: true,
+    mouseMode: "wheel",
+    resizeDebounceMs: 80,
+    clearScrollbackOnResize: false,
+    fixedBottomRows: 6,
+    safeRightCols: 2,
     tickMs: 120,
     createState: function(size) {
       return createStateWithSize(app, size);
     },
     render: render,
+    renderFixedBottom: renderFixedBottom,
     onFatal: function(state, info) {
       state.logger.error("tui requires an interactive terminal", {
         error: info.error,
