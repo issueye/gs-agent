@@ -38,6 +38,7 @@ if (!$SkipSmoke) {
   & $GsExe --timeout 20s invalid-tool-streak-smoke-test.gs
   & $GsExe --timeout 20s agent-cancel-smoke-test.gs
   & $GsExe --timeout 20s anthropic-empty-body-smoke-test.gs
+  & $GsExe --timeout 20s anthropic-retry-smoke-test.gs
   & $GsExe --timeout 20s llm-body-log-smoke-test.gs
   & $GsExe --timeout 20s todo-tool-smoke-test.gs
   & $GsExe --timeout 20s tool-result-sanitize-smoke-test.gs

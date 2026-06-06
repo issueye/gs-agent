@@ -27,6 +27,8 @@ export function anthropicOptions(config, agent) {
     model: anthropic.model,
     maxTokens: anthropic.maxTokens,
     timeoutMs: anthropic.timeoutMs,
+    retryCount: anthropic.retryCount,
+    retryDelayMs: anthropic.retryDelayMs,
     temperature: anthropic.temperature,
     thinking: anthropic.thinking,
     system: agent.system,

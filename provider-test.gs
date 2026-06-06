@@ -18,6 +18,8 @@ function main() {
         baseUrl: "https://example.test/anthropic",
         model: "test-model",
         maxTokens: 128,
+        retryCount: 4,
+        retryDelayMs: 25,
         thinking: "disabled",
       },
     },
@@ -25,6 +27,8 @@ function main() {
   let options = anthropicOptions(config, { system: "system prompt" });
   assert(options.apiKey === "test-key", "apiKey should be copied");
   assert(options.model === "test-model", "model should be copied");
+  assert(options.retryCount === 4, "retryCount should be copied");
+  assert(options.retryDelayMs === 25, "retryDelayMs should be copied");
   assert(options.system === "system prompt", "system prompt should come from agent config");
 
   println("provider:ok");
