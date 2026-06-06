@@ -62,7 +62,7 @@ thinking = "disabled"
 E:\codes\gts\dist\gs.exe --timeout 60s run
 ```
 
-运行后会在 `.agent/sessions/<session-id>/` 下生成独立的 `session.jsonl`、`session.messages.jsonl` 和 `answer.md`，不会覆盖旧会话。
+运行后会在 `.agent/sessions/<session-id>/` 下生成独立的 `session.jsonl`、`session.messages.db` 和 `answer.md`，不会覆盖旧会话。
 最近一次会话位置会记录到 `.agent/current-session.json`。
 运行日志会写入 `.agent/logs/gs-agent.log`，最近一次启动/运行的日志会写入 `.agent/logs/latest.log`。
 

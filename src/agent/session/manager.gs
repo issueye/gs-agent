@@ -26,7 +26,7 @@ export function sessionPaths(root, id) {
     sessionId: id,
     sessionDir: dir,
     sessionFile: path.join(dir, "session.jsonl"),
-    sessionArchiveFile: path.join(dir, "session.messages.jsonl"),
+    sessionArchiveFile: path.join(dir, "session.messages.db"),
     answerFile: path.join(dir, "answer.md"),
   };
 }

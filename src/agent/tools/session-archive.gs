@@ -17,7 +17,7 @@ export function createSearchSessionArchiveTool(file) {
     function(args) {
       let archive = createSessionArchive(file);
       return {
-        archiveFile: file,
+        archiveDatabase: file,
         query: args.query,
         results: archive.search({
           query: args.query,
