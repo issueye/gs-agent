@@ -136,6 +136,7 @@ function contextTokenThreshold(config, agent) {
 }
 
 function createAppKit(app, logger, onEvent) {
+  app.agent.requestBodyLogFile = app.llmBodyLogFile;
   return createCodingAgent({
     cwd: app.root,
     includeCodingTools: app.agent.includeCodingTools,
@@ -215,6 +216,7 @@ export function loadAgentApp(root) {
     answerFile: answerFile,
     logFile: logs.file,
     latestLogFile: logs.latest,
+    llmBodyLogFile: logs.llmBody,
   };
 }
 
@@ -275,6 +277,7 @@ export function runAgentTask(options) {
       answerFile: app.answerFile,
       logFile: app.logFile,
       latestLogFile: app.latestLogFile,
+      llmBodyLogFile: app.llmBodyLogFile,
     };
   } catch (err) {
     logger.error("agent run failed", {
@@ -342,6 +345,7 @@ export function runAgentTurn(options) {
       answerFile: app.answerFile,
       logFile: app.logFile,
       latestLogFile: app.latestLogFile,
+      llmBodyLogFile: app.llmBodyLogFile,
     };
   } catch (err) {
     logger.error("agent turn failed", {

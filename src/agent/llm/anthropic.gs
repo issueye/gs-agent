@@ -1,4 +1,5 @@
 import { messagesUrl } from "@/agent/llm/anthropic-url";
+import { appendJsonLog } from "@/agent/log";
 
 let http = require("@std/net/http/client");
 
@@ -86,6 +87,68 @@ function firstToolUse(blocks) {
 }
 
 // 创建 Anthropic 兼容 provider；DeepSeek 的 /anthropic endpoint 也走同一协议。
+export function anthropicRequestBody(options, messages, tools, turnOptions) {
+  if (!turnOptions) {
+    turnOptions = {};
+  }
+
+  let maxTokens = options.maxTokens;
+  if (!maxTokens) {
+    maxTokens = 1024;
+  }
+
+  let system = options.system;
+  if (!system) {
+    system = "You are a concise coding assistant.";
+  }
+
+  let body = {
+    model: options.model || "claude-3-5-sonnet-latest",
+    max_tokens: maxTokens,
+    system: system,
+    thinking: {
+      type: options.thinking || "disabled",
+    },
+    messages: toAnthropicMessages(messages),
+  };
+
+  if (turnOptions.allowTools && tools.length > 0) {
+    body.tools = toAnthropicTools(tools);
+  }
+
+  if ("temperature" in options) {
+    body.temperature = options.temperature;
+  }
+
+  return body;
+}
+
+function logRequestBody(options, url, body) {
+  if (!options.requestBodyLogFile) {
+    return;
+  }
+
+  appendJsonLog(options.requestBodyLogFile, {
+    time: (new Date()).toISOString(),
+    provider: "anthropic",
+    url: url,
+    body: body,
+  });
+}
+
+export function parseAnthropicPayload(response) {
+  let body = String(response.body || "");
+  if (body.trim() === "") {
+    throw new Error("Anthropic request returned empty body: status=" + String(response.status));
+  }
+
+  try {
+    return JSON.parse(body);
+  } catch (err) {
+    throw new Error("Anthropic request returned invalid JSON: status=" + String(response.status) + " bodyPrefix=" + body.slice(0, 240));
+  }
+}
+
 export function createAnthropicProvider(options) {
   if (!options) {
     options = {};
@@ -101,49 +164,10 @@ export function createAnthropicProvider(options) {
     baseUrl = "https://api.anthropic.com";
   }
 
-  let model = options.model;
-  if (!model) {
-    model = "claude-3-5-sonnet-latest";
-  }
-
-  let maxTokens = options.maxTokens;
-  if (!maxTokens) {
-    maxTokens = 1024;
-  }
-
-  let system = options.system;
-  if (!system) {
-    system = "You are a concise coding assistant.";
-  }
-
-  function next(messages, tools, turnOptions) {
-    if (!turnOptions) {
-      turnOptions = {};
-    }
-
-    // DeepSeek v4 flash 的 thinking 模式默认可能要求回传 thinking block；
-    // 这里默认 disabled，先保证普通工具调用闭环稳定。
-    let body = {
-      model: model,
-      max_tokens: maxTokens,
-      system: system,
-      thinking: {
-        type: options.thinking || "disabled",
-      },
-      messages: toAnthropicMessages(messages),
-    };
-
-    if (turnOptions.allowTools && tools.length > 0) {
-      body.tools = toAnthropicTools(tools);
-    }
-
-    if ("temperature" in options) {
-      body.temperature = options.temperature;
-    }
-
+  function requestOnce(body, url) {
     let response = http.request({
       method: "POST",
-      url: messagesUrl(baseUrl),
+      url: url,
       timeoutMs: options.timeoutMs || 60000,
       headers: {
         "content-type": "application/json",
@@ -157,7 +181,23 @@ export function createAnthropicProvider(options) {
       throw new Error("Anthropic request failed: " + String(response.status) + " " + response.body);
     }
 
-    let payload = JSON.parse(response.body);
+    return parseAnthropicPayload(response);
+  }
+
+  function next(messages, tools, turnOptions) {
+    let body = anthropicRequestBody(options, messages, tools, turnOptions);
+    let url = messagesUrl(baseUrl);
+    logRequestBody(options, url, body);
+
+    let payload = undefined;
+    try {
+      payload = requestOnce(body, url);
+    } catch (err) {
+      if (!String(err).includes("empty body")) {
+        throw err;
+      }
+      payload = requestOnce(body, url);
+    }
     let toolUse = firstToolUse(payload.content);
     if (toolUse) {
       return {

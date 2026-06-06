@@ -1,3 +1,5 @@
+import { sanitizeToolResult } from "@/agent/tools/sanitize";
+
 export function createAgent(options) {
   let provider = options.provider;
   let registry = options.registry;
@@ -33,6 +35,10 @@ export function createAgent(options) {
     if (!messages) {
       messages = [];
     }
+    let invalidToolStreak = {
+      key: "",
+      count: 0,
+    };
 
     if (input) {
       let userMessage = { role: "user", content: input };
@@ -90,7 +96,7 @@ export function createAgent(options) {
         emit("tool_call", next);
         messages.push(next);
 
-        let result = registry.safeCall(next.name, next.args);
+        let result = sanitizeToolResult(next.name, registry.safeCall(next.name, next.args));
         let toolMessage = {
           role: "tool",
           id: next.id,
@@ -100,6 +106,25 @@ export function createAgent(options) {
         messages.push(toolMessage);
         emit("tool_result", toolMessage);
         emit("turn_end", { turn: turn, stop: "tool_call" });
+
+        if (isInvalidToolArgs(result)) {
+          let key = next.name + ":" + JSON.stringify(next.args || {});
+          if (invalidToolStreak.key === key) {
+            invalidToolStreak.count = invalidToolStreak.count + 1;
+          } else {
+            invalidToolStreak.key = key;
+            invalidToolStreak.count = 1;
+          }
+          if (invalidToolStreak.count >= 2) {
+            let stopped = repeatedInvalidToolAnswer(next.name, result);
+            messages.push(stopped);
+            emit("message", stopped);
+            return stopped;
+          }
+        } else {
+          invalidToolStreak.key = "";
+          invalidToolStreak.count = 0;
+        }
         continue;
       }
 
@@ -136,6 +161,32 @@ export function createAgent(options) {
   return {
     run: run,
     runMessages: runMessages,
+  };
+}
+
+function isInvalidToolArgs(result) {
+  if (!result || result.ok !== false) {
+    return false;
+  }
+  return String(result.error || "").includes("invalid args for ");
+}
+
+function requiredFields(result) {
+  if (!result || !result.expectedInputSchema || !result.expectedInputSchema.required) {
+    return "";
+  }
+  return result.expectedInputSchema.required.join(", ");
+}
+
+function repeatedInvalidToolAnswer(name, result) {
+  let required = requiredFields(result);
+  let detail = "";
+  if (required !== "") {
+    detail = " Required fields: " + required + ".";
+  }
+  return {
+    role: "assistant",
+    content: "Agent stopped because the model repeatedly called " + name + " with invalid or empty arguments." + detail + " Please retry with a more explicit instruction, or ask me to write the document to a concrete path such as workspace/analysis.md.",
   };
 }
 

@@ -43,7 +43,7 @@ export function createReadFileTool(cwd) {
 export function createWriteFileTool(cwd) {
   return createTool(
     "write_file",
-    "Write a UTF-8 text file inside the workspace. Always provide both path and content. For long documents, write the first chunk with write_file, then add more chunks with append_file.",
+    "Write a UTF-8 text file inside the workspace. Never call this tool with empty input. Required input example: {\"path\":\"workspace/analysis.md\",\"content\":\"# Title\\n...\"}. For long documents, write the first chunk with write_file, then add more chunks with append_file.",
     {
       type: "object",
       required: ["path", "content"],
@@ -68,7 +68,7 @@ export function createWriteFileTool(cwd) {
 export function createAppendFileTool(cwd) {
   return createTool(
     "append_file",
-    "Append UTF-8 text to a file inside the workspace. Use this to continue writing long documents after creating the file with write_file.",
+    "Append UTF-8 text to a file inside the workspace. Never call this tool with empty input. Required input example: {\"path\":\"workspace/analysis.md\",\"content\":\"\\nMore text...\"}. Use this to continue writing long documents after creating the file with write_file.",
     {
       type: "object",
       required: ["path", "content"],

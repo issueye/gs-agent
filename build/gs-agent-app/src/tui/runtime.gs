@@ -3,6 +3,17 @@ import { parseKeys } from "@/tui/keys";
 let terminal = require("@std/terminal");
 let tui = require("@std/tui");
 
+function restoreTerminal(terminalApi, alternateScreen, mouseMode) {
+  if (!terminalApi || !terminalApi.write) {
+    return;
+  }
+  let text = "\x1b[?25h\x1b[?2004l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l";
+  if (alternateScreen) {
+    text = text + "\x1b[?1049l";
+  }
+  terminalApi.write(text);
+}
+
 function defaultShouldExit(state) {
   return !!state.shouldExit;
 }
@@ -270,6 +281,7 @@ export function runTuiApp(options) {
     callHook(options.onStop, state, ctx);
     return state;
   } catch (err) {
+    restoreTerminal(terminalApi, alternateScreen, mouseMode);
     if (!started) {
       state.fatalError = err;
     }

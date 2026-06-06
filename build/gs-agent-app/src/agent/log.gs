@@ -35,7 +35,12 @@ export function logPaths(root) {
     dir: dir,
     file: path.join(dir, "gs-agent.log"),
     latest: path.join(dir, "latest.log"),
+    llmBody: path.join(dir, "llm-body.jsonl"),
   };
+}
+
+export function appendJsonLog(file, record) {
+  appendLine(file, safeJson(record));
 }
 
 export function createLogger(options) {
@@ -120,25 +125,29 @@ export function eventLogFields(event) {
     kind: event.kind,
   };
 
-  if (event.kind === "message" && payload) {
+  if (!payload) {
+    return fields;
+  }
+
+  if (event.kind === "message") {
     fields.role = payload.role;
     fields.content = shortText(payload.content, 180);
-  } else if (event.kind === "tool_call" && payload) {
+  } else if (event.kind === "tool_call") {
     fields.name = payload.name;
     fields.id = payload.id;
     fields.args = payload.args;
-  } else if (event.kind === "tool_result" && payload) {
+  } else if (event.kind === "tool_result") {
     fields.name = payload.name;
     fields.id = payload.id;
     fields.content = shortText(payload.content, 220);
-  } else if (event.kind === "turn_start" && payload) {
+  } else if (event.kind === "turn_start") {
     fields.turn = payload.turn;
-  } else if (event.kind === "turn_end" && payload) {
+  } else if (event.kind === "turn_end") {
     fields.turn = payload.turn;
     fields.stop = payload.stop;
-  } else if (event.kind === "error" && payload) {
+  } else if (event.kind === "error") {
     fields.message = shortText(payload.message, 220);
-  } else if (event.kind === "answer" && payload) {
+  } else if (event.kind === "answer") {
     fields.file = payload.file;
     fields.content = shortText(payload.content, 220);
   }

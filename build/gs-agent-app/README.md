@@ -42,8 +42,8 @@ tools = ["read_file", "list_dir", "grep", "todo"]
 apiKey = "sk-..."
 baseUrl = "https://api.deepseek.com/anthropic"
 model = "deepseek-v4-flash"
-maxTokens = 1024
-contextTokenThreshold = 258000
+maxTokens = 4096
+contextTokenThreshold = 24000
 timeoutMs = 60000
 thinking = "disabled"
 ```

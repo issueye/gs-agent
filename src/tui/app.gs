@@ -224,7 +224,6 @@ function runMessageTurn(state, ctx, input) {
       onEvent: function(event) {
         addEvent(state, event);
         state.logger.info("tui received event", eventLogFields(event));
-        ctx.render();
       },
     });
     state.answer = result.answer;
@@ -250,7 +249,6 @@ function runMessageTurn(state, ctx, input) {
   }
 
   state.running = false;
-  ctx.render();
 }
 
 function sendMessage(state, ctx) {

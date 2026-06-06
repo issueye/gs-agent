@@ -30,6 +30,7 @@ export function anthropicOptions(config, agent) {
     temperature: anthropic.temperature,
     thinking: anthropic.thinking,
     system: agent.system,
+    requestBodyLogFile: agent.requestBodyLogFile,
   };
 }
 
