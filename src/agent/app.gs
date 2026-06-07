@@ -233,6 +233,7 @@ function createAppKit(app, logger, onEvent) {
       },
     }),
     tools: tools,
+    sessionId: app.sessionId,
     sessionFile: app.sessionFile,
     sessionArchiveFile: app.sessionArchiveFile,
     contextTokenThreshold: contextTokenThreshold(app.config, app.agent),

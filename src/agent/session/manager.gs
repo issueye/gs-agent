@@ -16,6 +16,10 @@ function sessionRoot(root, id) {
   return path.join(root, ".agent", "sessions", id);
 }
 
+export function sessionArchiveFile(root) {
+  return path.join(root, ".agent", "session-archive.db");
+}
+
 export function currentSessionFile(root) {
   return path.join(root, ".agent", "current-session.json");
 }
@@ -26,7 +30,7 @@ export function sessionPaths(root, id) {
     sessionId: id,
     sessionDir: dir,
     sessionFile: path.join(dir, "session.jsonl"),
-    sessionArchiveFile: path.join(dir, "session.messages.db"),
+    sessionArchiveFile: sessionArchiveFile(root),
     answerFile: path.join(dir, "answer.md"),
   };
 }

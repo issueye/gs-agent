@@ -5,6 +5,7 @@ import { createAgentSession, readCurrentAgentSession, writeCurrentAgentSession }
 import { applySkillsToSystem, discoverSkills } from "@/agent/skills/loader";
 import { createEventBus } from "@/agent/events/bus";
 import { attachIMBotToBus, imMessagePrompt, sendIMReply } from "@/agent/im/bridge";
+import { createRunSkillTool } from "@/agent/tools/skill-runner";
 import { createRunSubagentTool } from "@/agent/tools/subagent";
 import { createWorkspaceTools } from "@/agent/tools/workspace";
 
@@ -56,7 +57,7 @@ function defaultAgentConfig() {
     includeSkills: true,
     skillDir: ".agent/skills",
     skills: ["*"],
-    tools: ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"],
+    tools: ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent", "run_skill"],
     taskFile: "workspace/task.txt",
   };
 }
@@ -185,6 +186,22 @@ function createAppKit(app, logger, onEvent) {
   app.agent.requestBodyLogFile = app.llmBodyLogFile;
   app.agent.system = app.system;
   let tools = createWorkspaceTools(app.workspace);
+  if (app.agent.includeSkills !== false && app.skills.length > 0) {
+    tools.push(createRunSkillTool({
+      root: app.root,
+      config: app.config,
+      agent: app.agent,
+      system: app.system,
+      skills: app.skills,
+      contextTokenThreshold: contextTokenThreshold(app.config, app.agent),
+      onEvent: function(event) {
+        logger.info("skill event", eventLogFields(event));
+        if (onEvent) {
+          onEvent(event);
+        }
+      },
+    }));
+  }
   if (app.agent.includeSubagents !== false) {
     tools.push(createRunSubagentTool({
       root: app.root,
@@ -216,6 +233,7 @@ function createAppKit(app, logger, onEvent) {
       },
     }),
     tools: tools,
+    sessionId: app.sessionId,
     sessionFile: app.sessionFile,
     sessionArchiveFile: app.sessionArchiveFile,
     contextTokenThreshold: contextTokenThreshold(app.config, app.agent),

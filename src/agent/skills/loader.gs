@@ -220,7 +220,7 @@ export function discoverSkills(root, agent) {
 function renderSkillIndex(skill) {
   let text = "- " + skill.name + ": " + skill.description + "\n  path: " + skill.file;
   if (skill.triggerKeywords && skill.triggerKeywords.length > 0) {
-    text = text + "\n  trigger_keywords: " + skill.triggerKeywords.join(", ");
+    text = text + "\n  legacy_trigger_keywords: " + skill.triggerKeywords.join(", ");
   }
   return text;
 }
@@ -236,8 +236,10 @@ export function renderSkillsSystem(skills) {
   }
 
   return "Available skills (metadata only):\n"
-    + "Each skill is a folder containing SKILL.md with YAML frontmatter. "
-    + "Use a skill when the user's request matches its name, description, or trigger keywords. "
+    + "Each skill is a folder containing a standards-compliant SKILL.md. "
+    + "The SKILL.md frontmatter should contain only name and description; description is the primary trigger surface. "
+    + "Use a skill when the user's request matches its name or description. "
+    + "When creating or updating a skill, call create_skill; do not write .agent/skills files manually and do not create skill.toml or main.gs for skills. "
     + "When run_skill is available and a skill is relevant, call run_skill with the skill name and task so a subagent can execute that skill. "
     + "If run_skill is not available, read its SKILL.md file before acting and follow its Markdown instructions. "
     + "Do not load every skill body up front; use progressive disclosure.\n\n"

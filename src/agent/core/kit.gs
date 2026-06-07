@@ -31,6 +31,7 @@ export function createCodingAgent(options) {
   // 默认使用 JSONL 记录事件，便于人工审计和后续回放。
   if (!session && options.sessionFile) {
     session = createJSONLSession(options.sessionFile, {
+      sessionId: options.sessionId,
       archiveFile: options.sessionArchiveFile,
     });
   }
@@ -40,7 +41,9 @@ export function createCodingAgent(options) {
     archiveFile = session.archiveFile;
   }
   if (archiveFile && options.includeSessionArchiveTool !== false) {
-    registry.register(createSearchSessionArchiveTool(archiveFile));
+    registry.register(createSearchSessionArchiveTool(archiveFile, {
+      sessionId: options.sessionId,
+    }));
   }
 
   let contextSelector = options.contextSelector;

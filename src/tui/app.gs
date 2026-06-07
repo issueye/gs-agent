@@ -153,7 +153,10 @@ function loadRecentSession(state) {
     return;
   }
   applyAgentSession(state.app, current);
-  let session = createJSONLSession(state.app.sessionFile);
+  let session = createJSONLSession(state.app.sessionFile, {
+    sessionId: state.app.sessionId,
+    archiveFile: state.app.sessionArchiveFile,
+  });
   if (fs.existsSync(state.app.sessionFile)) {
     state.events = session.readAll();
   }

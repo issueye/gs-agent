@@ -35,6 +35,7 @@ function openArchiveDb(file) {
   let conn = db.open("sqlite", file);
   conn.exec("create table if not exists session_messages (idx integer primary key, session_id text, level text, kind text, role text, name text, message_id text, content text, message_json text, entry_json text, created_at text not null default current_timestamp)");
   conn.exec("create index if not exists idx_session_messages_content on session_messages(content)");
+  conn.exec("create index if not exists idx_session_messages_session on session_messages(session_id)");
   conn.exec("create index if not exists idx_session_messages_level on session_messages(level)");
   conn.exec("create index if not exists idx_session_messages_kind on session_messages(kind)");
   return conn;
@@ -69,14 +70,19 @@ function archiveEntry(record, index) {
 
 export function defaultArchiveFile(sessionFile) {
   let dir = path.dirname(sessionFile);
-  let base = path.basename(sessionFile);
-  if (base.endsWith(".jsonl")) {
-    base = base.slice(0, base.length - 6);
+  let parent = path.dirname(dir);
+  if (path.basename(parent) === "sessions") {
+    return path.join(path.dirname(parent), "session-archive.db");
   }
-  return path.join(dir, base + ".messages.db");
+  return path.join(dir, "session-archive.db");
 }
 
-export function createSessionArchive(file) {
+export function createSessionArchive(file, options) {
+  if (!options) {
+    options = {};
+  }
+  let sessionId = options.sessionId || "";
+
   function append(record) {
     let conn = openArchiveDb(file);
     let indexRow = conn.queryOne("select coalesce(max(idx) + 1, 0) as next_idx from session_messages");
@@ -114,7 +120,12 @@ export function createSessionArchive(file) {
       return [];
     }
     let conn = openArchiveDb(file);
-    let rows = conn.query("select idx, session_id, level, kind, role, name, message_id, content, message_json, entry_json from session_messages order by idx");
+    let rows = [];
+    if (sessionId !== "") {
+      rows = conn.query("select idx, session_id, level, kind, role, name, message_id, content, message_json, entry_json from session_messages where session_id = ? order by idx", [sessionId]);
+    } else {
+      rows = conn.query("select idx, session_id, level, kind, role, name, message_id, content, message_json, entry_json from session_messages order by idx");
+    }
     conn.close();
     let entries = [];
     for (let row of rows) {
@@ -148,6 +159,7 @@ export function createSessionArchive(file) {
     let query = lower(options.query);
     let maxResults = options.maxResults || 8;
     let maxChars = options.maxChars || 1200;
+    let searchSessionId = options.sessionId || sessionId;
     if (!fs.existsSync(file)) {
       return [];
     }
@@ -155,16 +167,30 @@ export function createSessionArchive(file) {
     let conn = openArchiveDb(file);
     let rows = [];
     if (query === "") {
-      rows = conn.query(
-        "select idx, level, kind, role, name, message_id, content from session_messages order by idx desc limit ?",
-        [maxResults]
-      );
+      if (searchSessionId !== "") {
+        rows = conn.query(
+          "select idx, session_id, level, kind, role, name, message_id, content from session_messages where session_id = ? order by idx desc limit ?",
+          [searchSessionId, maxResults]
+        );
+      } else {
+        rows = conn.query(
+          "select idx, session_id, level, kind, role, name, message_id, content from session_messages order by idx desc limit ?",
+          [maxResults]
+        );
+      }
     } else {
       let pattern = "%" + query + "%";
-      rows = conn.query(
-        "select idx, level, kind, role, name, message_id, content from session_messages where lower(entry_json) like ? order by idx desc limit ?",
-        [pattern, maxResults]
-      );
+      if (searchSessionId !== "") {
+        rows = conn.query(
+          "select idx, session_id, level, kind, role, name, message_id, content from session_messages where session_id = ? and lower(entry_json) like ? order by idx desc limit ?",
+          [searchSessionId, pattern, maxResults]
+        );
+      } else {
+        rows = conn.query(
+          "select idx, session_id, level, kind, role, name, message_id, content from session_messages where lower(entry_json) like ? order by idx desc limit ?",
+          [pattern, maxResults]
+        );
+      }
     }
     conn.close();
 
@@ -172,6 +198,7 @@ export function createSessionArchive(file) {
     for (let row of rows) {
       results.push({
         index: row.idx,
+        sessionId: row.session_id,
         level: row.level,
         kind: row.kind,
         role: row.role,

@@ -16,6 +16,7 @@ let session = createAgentSession(root);
 assert(session.sessionId !== "", "session id should be present");
 assert(session.sessionFile.includes(".agent"), "session file should be under .agent");
 assert(session.sessionFile.includes("sessions"), "session file should be under sessions dir");
+assert(session.sessionArchiveFile.endsWith(path.join(".agent", "session-archive.db")), "session archive should be a single shared sqlite database");
 assert(session.answerFile.endsWith("answer.md"), "answer file should be named answer.md");
 
 writeCurrentAgentSession(root, session);

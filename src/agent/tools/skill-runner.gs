@@ -1,19 +1,9 @@
 import { createCodingAgent } from "@/agent/core/kit";
 import { createProvider } from "@/agent/llm/providers";
 import { createAgentSession } from "@/agent/session/manager";
+import { discoverSkills } from "@/agent/skills/loader";
+import { childAgentTools } from "@/agent/tools/child-tools";
 import { createTool } from "@/agent/tools/registry";
-
-function includes(list, value) {
-  if (!list) {
-    return false;
-  }
-  for (let item of list) {
-    if (item === value) {
-      return true;
-    }
-  }
-  return false;
-}
 
 function cloneAgentConfig(agent, system, maxTurns) {
   let out = {};
@@ -22,38 +12,6 @@ function cloneAgentConfig(agent, system, maxTurns) {
   }
   out.system = system;
   out.maxTurns = maxTurns;
-  return out;
-}
-
-function defaultSkillTools(parentTools) {
-  let defaults = ["read_file", "list_dir", "grep", "todo"];
-  let out = [];
-  for (let tool of defaults) {
-    if (includes(parentTools, tool)) {
-      out.push(tool);
-    }
-  }
-  return out;
-}
-
-function normalizeRequestedTools(parentTools, requested) {
-  if (!requested) {
-    return defaultSkillTools(parentTools);
-  }
-  if (requested.length === 0) {
-    return defaultSkillTools(parentTools);
-  }
-
-  let out = [];
-  for (let tool of requested) {
-    if (tool === "run_subagent" || tool === "run_skill") {
-      continue;
-    }
-    if (!includes(parentTools, tool)) {
-      throw new ReferenceError("skill subagent tool is not enabled for parent agent: " + tool);
-    }
-    out.push(tool);
-  }
   return out;
 }
 
@@ -93,11 +51,22 @@ export function createRunSkillTool(options) {
   let baseSystem = options.system || parentAgent.system;
   let contextTokenThreshold = options.contextTokenThreshold;
   let onEvent = options.onEvent;
-  let skills = options.skills || [];
+  let initialSkills = options.skills || [];
+
+  function currentSkills() {
+    return discoverSkills(root, parentAgent);
+  }
+
+  function skillsForError(discovered) {
+    if (discovered && discovered.length > 0) {
+      return discovered;
+    }
+    return initialSkills;
+  }
 
   return createTool(
     "run_skill",
-    "Execute one discovered local skill in a synchronous child agent. The child receives the selected SKILL.md content in its system prompt and returns its final answer.",
+    "Execute one discovered local skill in a synchronous child agent. The child receives the selected SKILL.md content in its system prompt and returns its final answer. Skills are rediscovered on each call, so a skill created earlier in the same session can be used immediately.",
     {
       type: "object",
       required: ["skill", "task"],
@@ -113,13 +82,14 @@ export function createRunSkillTool(options) {
       },
     },
     function(args) {
+      let skills = currentSkills();
       let skill = findSkill(skills, String(args.skill || ""));
       if (!skill) {
-        throw new ReferenceError("unknown skill: " + String(args.skill || "") + " (available: " + skillNames(skills).join(", ") + ")");
+        throw new ReferenceError("unknown skill: " + String(args.skill || "") + " (available: " + skillNames(skillsForError(skills)).join(", ") + ")");
       }
 
       let maxTurns = args.maxTurns || 6;
-      let childTools = normalizeRequestedTools(parentAgent.tools, args.tools);
+      let childTools = childAgentTools(parentAgent.tools, args.tools);
       let session = createAgentSession(root);
       let childSystem = skillSystem(baseSystem, skill, args.task);
       let childAgentConfig = cloneAgentConfig(parentAgent, childSystem, maxTurns);
@@ -143,7 +113,7 @@ export function createRunSkillTool(options) {
         cwd: root,
         includeCodingTools: parentAgent.includeCodingTools,
         enabledTools: childTools,
-        includeDynamicTools: false,
+        includeDynamicTools: true,
         includeSessionArchiveTool: true,
         provider: createProvider(config, childAgentConfig),
         sessionFile: session.sessionFile,

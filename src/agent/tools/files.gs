@@ -16,6 +16,17 @@ export function workspacePath(cwd, requested) {
   return target;
 }
 
+function assertNotSkillWritePath(cwd, requested) {
+  let root = path.resolve(cwd);
+  let target = path.resolve(path.join(root, requested));
+  let skillsRoot = path.resolve(path.join(root, ".agent", "skills"));
+  let prefix = skillsRoot + path.sep;
+
+  if (target === skillsRoot || target.startsWith(prefix)) {
+    throw new RangeError("write_file and append_file cannot write under .agent/skills. Use create_skill so the skill is created as .agent/skills/<name>/SKILL.md with standard frontmatter.");
+  }
+}
+
 // 读取 UTF-8 文本文件，返回相对路径和内容，便于模型继续推理。
 export function createReadFileTool(cwd) {
   return createTool(
@@ -43,7 +54,7 @@ export function createReadFileTool(cwd) {
 export function createWriteFileTool(cwd) {
   return createTool(
     "write_file",
-    "Write a UTF-8 text file inside the workspace. Never call this tool with empty input. Required input example: {\"path\":\"workspace/analysis.md\",\"content\":\"# Title\\n...\"}. For long documents, write the first chunk with write_file, then add more chunks with append_file.",
+    "Write a UTF-8 text file inside the workspace. Never call this tool with empty input. Required input example: {\"path\":\"workspace/analysis.md\",\"content\":\"# Title\\n...\"}. Do not use write_file to create skills under .agent/skills; call create_skill so the skill is written as a standard SKILL.md. For long documents, write the first chunk with write_file, then add more chunks with append_file.",
     {
       type: "object",
       required: ["path", "content"],
@@ -54,6 +65,7 @@ export function createWriteFileTool(cwd) {
       },
     },
     function(args) {
+      assertNotSkillWritePath(cwd, args.path);
       let target = workspacePath(cwd, args.path);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, args.content);
@@ -79,6 +91,7 @@ export function createAppendFileTool(cwd) {
       },
     },
     function(args) {
+      assertNotSkillWritePath(cwd, args.path);
       let target = workspacePath(cwd, args.path);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.appendTextSync(target, args.content);

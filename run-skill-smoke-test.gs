@@ -20,7 +20,7 @@ function write(file, text) {
 
 let root = process.cwd();
 let skillDir = path.join(root, ".agent", "skills", "delegate-demo");
-write(path.join(skillDir, "SKILL.md"), "---\nname: delegate-demo\ndescription: Demo skill executed by a subagent.\ntrigger_keywords:\n  - delegate\n---\n\n# Delegate Demo\n\nUse this skill only through the run_skill smoke test.\n");
+write(path.join(skillDir, "SKILL.md"), "---\nname: delegate-demo\ndescription: Demo skill executed by a subagent. Use when validating run_skill delegation.\n---\n\n# Delegate Demo\n\nUse this skill only through the run_skill smoke test.\n");
 
 let agentConfig = {
   provider: "fake",

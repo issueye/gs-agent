@@ -46,8 +46,11 @@ if (!$SkipSmoke) {
   & $GsExe --timeout 20s dynamic-tool-smoke-test.gs
   & $GsExe --timeout 20s skill-system-smoke-test.gs
   & $GsExe --timeout 20s create-skill-tool-smoke-test.gs
+  & $GsExe --timeout 20s skill-write-guard-smoke-test.gs
+  & $GsExe --timeout 20s child-tools-smoke-test.gs
   & $GsExe --timeout 20s subagent-smoke-test.gs
   & $GsExe --timeout 20s run-skill-smoke-test.gs
+  & $GsExe --timeout 20s run-skill-refresh-smoke-test.gs
   & $GsExe --timeout 20s session-manager-smoke-test.gs
   & $GsExe --timeout 20s session-rotation-smoke-test.gs
   & $GsExe --timeout 20s tui-smoke-test.gs

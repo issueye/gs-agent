@@ -26,14 +26,16 @@ export function createJSONLSession(file, options) {
     options = {};
   }
 
-  let id = crypto.randomUUID();
+  let id = options.sessionId || crypto.randomUUID();
   let archiveFile = options.archiveFile;
   if (archiveFile === undefined) {
     archiveFile = defaultArchiveFile(file);
   }
   let archive = undefined;
   if (archiveFile) {
-    archive = createSessionArchive(archiveFile);
+    archive = createSessionArchive(archiveFile, {
+      sessionId: id,
+    });
   }
 
   function append(kind, payload) {

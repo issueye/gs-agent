@@ -62,7 +62,7 @@ thinking = "disabled"
 E:\codes\gts\dist\gs.exe --timeout 60s run
 ```
 
-运行后会在 `.agent/sessions/<session-id>/` 下生成独立的 `session.jsonl`、`session.messages.db` 和 `answer.md`，不会覆盖旧会话。
+运行后会在 `.agent/sessions/<session-id>/` 下生成独立的 `session.jsonl` 和 `answer.md`，并把可搜索对话消息写入共享 SQLite 数据库 `.agent/session-archive.db`，不会覆盖旧会话。
 最近一次会话位置会记录到 `.agent/current-session.json`。
 运行日志会写入 `.agent/logs/gs-agent.log`，最近一次启动/运行的日志会写入 `.agent/logs/latest.log`。
 
@@ -183,9 +183,11 @@ tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"
 ```
 
 启用 `todo` 后，模型可以用单个 `todo` 工具管理 `.agent/todos.json` 中的任务，支持 `add`、`list`、`get`、`update`、`delete` 和 `clear`。任务状态为 `open` 或 `done`，`list` 和 `clear` 可按 `status` 过滤。
-启用 `create_skill` 后，模型可以创建带 YAML frontmatter 的 `.agent/skills/<name>/SKILL.md`，用于沉淀新的本地技能。
-启用 `run_subagent` 后，模型可以把聚焦任务委派给一个同步子 agent；子 agent 使用独立 session，默认只拿父 agent 已启用的 `read_file`、`list_dir`、`grep` 和 `todo`。
+启用 `create_skill` 后，模型可以创建标准 `.agent/skills/<name>/SKILL.md`，用于沉淀新的本地技能。创建或更新技能时应调用 `create_skill`，不要用 `write_file` 手写 `.agent/skills` 下的文件，也不要为技能创建 `skill.toml` 或 `main.gs`。
+`write_file` 和 `append_file` 会拒绝写入 `.agent/skills`，以防模型绕过 `create_skill` 写出错误目录结构。
+启用 `run_subagent` 后，模型可以把聚焦任务委派给一个同步子 agent；子 agent 使用独立 session，默认继承父 agent 已启用的所有工具，但排除 `create_skill`、`run_subagent` 和 `run_skill`。
 启用 `run_skill` 后，模型在命中技能索引时可以把技能名和任务交给同步子 agent；子 agent 的 system prompt 会包含对应 `SKILL.md` 全文，并返回最终结果。
+`run_skill` 每次调用都会重新发现 `.agent/skills`，所以同一会话中刚用 `create_skill` 创建的技能可以立即运行，不需要重启 TUI 或开启新会话。
 
 如需让 agent 写文件或执行 shell 命令，可显式加入：
 
@@ -261,9 +263,9 @@ E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 
 ## 技能系统
 
-agent 会自动发现 `.agent/skills/*/SKILL.md`。按照 Skills 规范，启动时只把技能的 `name`、`description`、`trigger_keywords` 和文件路径作为索引注入 system prompt；当用户请求命中某个技能且 `run_skill` 可用时，模型会调用 `run_skill`，由同步子 agent 读取该技能的 `SKILL.md` 全文并按其中说明执行。若未启用 `run_skill`，模型仍可按索引路径渐进读取技能文件。
+agent 会自动发现 `.agent/skills/*/SKILL.md`。按照 Skills 规范，启动时只把技能的 `name`、`description` 和文件路径作为索引注入 system prompt；其中 `description` 是主要触发表面，需要同时写清楚技能做什么以及何时使用。当用户请求命中某个技能且 `run_skill` 可用时，模型会调用 `run_skill`，由同步子 agent 读取该技能的 `SKILL.md` 全文并按其中说明执行。若未启用 `run_skill`，模型仍可按索引路径渐进读取技能文件。
 
-`SKILL.md` 顶部必须包含 YAML frontmatter。`name` 只能使用小写字母、数字和连字符，最长 64 个字符，且不能以连字符开头或结尾；`description` 必填，用来判断技能何时触发。
+`SKILL.md` 顶部必须包含 YAML frontmatter，且 frontmatter 只使用 `name` 和 `description`。`name` 只能使用小写字母、数字和连字符，最长 64 个字符，且不能以连字符开头或结尾；`description` 必填，用来判断技能何时触发。技能正文只写触发后的执行说明和必要资源导航。
 
 目录示例：
 
@@ -277,10 +279,7 @@ agent 会自动发现 `.agent/skills/*/SKILL.md`。按照 Skills 规范，启动
 ```markdown
 ---
 name: code-review
-description: Review code changes for bugs, regressions, and missing tests.
-trigger_keywords:
-  - review
-  - code review
+description: Review code changes for bugs, regressions, and missing tests. Use when the user asks for review, code review, risk analysis, or pre-merge inspection.
 ---
 
 # Code Review
@@ -312,7 +311,9 @@ skills = ["code-review", "docs"]
 ```powershell
 E:\codes\gts\dist\gs.exe --timeout 20s skill-system-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s skill-write-guard-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s run-skill-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s run-skill-refresh-smoke-test.gs
 ```
 
 `run_skill` 工具参数：
@@ -328,7 +329,7 @@ E:\codes\gts\dist\gs.exe --timeout 20s run-skill-smoke-test.gs
 
 - `skill` 和 `task` 必填。
 - `maxTurns` 可选，范围 1 到 12，默认 6。
-- `tools` 可选；只能从父 agent 已启用的工具里选，且不会把 `run_skill` 或 `run_subagent` 继续传给子 agent。
+- `tools` 可选；只能从父 agent 已启用的工具里选，且不会把 `create_skill`、`run_skill` 或 `run_subagent` 继续传给子 agent。未指定时默认继承父 agent 已启用的其他工具，包括动态工具。
 
 ## Subagent
 
@@ -348,7 +349,7 @@ E:\codes\gts\dist\gs.exe --timeout 20s run-skill-smoke-test.gs
 - `task` 必填。
 - `role` 可选，用来给子 agent 一个聚焦身份。
 - `maxTurns` 可选，范围 1 到 12，默认 4。
-- `tools` 可选；只能从父 agent 已启用的工具里选，且不会把 `run_subagent` 继续传给子 agent。
+- `tools` 可选；只能从父 agent 已启用的工具里选，且不会把 `create_skill`、`run_subagent` 或 `run_skill` 继续传给子 agent。未指定时默认继承父 agent 已启用的其他工具，包括动态工具。
 - 第一版是同步执行，不做后台并行调度；父 agent 会等待子 agent 完成。
 
 配置开关：
@@ -375,8 +376,11 @@ E:\codes\gts\dist\gs.exe --timeout 20s todo-tool-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s dynamic-tool-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s skill-system-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s skill-write-guard-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s child-tools-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s subagent-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s run-skill-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s run-skill-refresh-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s markdown-stdlib-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s provider-test.gs

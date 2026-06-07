@@ -1,19 +1,8 @@
 import { createCodingAgent } from "@/agent/core/kit";
 import { createProvider } from "@/agent/llm/providers";
 import { createAgentSession } from "@/agent/session/manager";
+import { childAgentTools } from "@/agent/tools/child-tools";
 import { createTool } from "@/agent/tools/registry";
-
-function includes(list, value) {
-  if (!list) {
-    return false;
-  }
-  for (let item of list) {
-    if (item === value) {
-      return true;
-    }
-  }
-  return false;
-}
 
 function cloneAgentConfig(agent, system, maxTurns) {
   let out = {};
@@ -22,38 +11,6 @@ function cloneAgentConfig(agent, system, maxTurns) {
   }
   out.system = system;
   out.maxTurns = maxTurns;
-  return out;
-}
-
-function defaultSubagentTools(parentTools) {
-  let defaults = ["read_file", "list_dir", "grep", "todo"];
-  let out = [];
-  for (let tool of defaults) {
-    if (includes(parentTools, tool)) {
-      out.push(tool);
-    }
-  }
-  return out;
-}
-
-function normalizeRequestedTools(parentTools, requested) {
-  if (!requested) {
-    return defaultSubagentTools(parentTools);
-  }
-  if (requested.length === 0) {
-    return defaultSubagentTools(parentTools);
-  }
-
-  let out = [];
-  for (let tool of requested) {
-    if (tool === "run_subagent") {
-      continue;
-    }
-    if (!includes(parentTools, tool)) {
-      throw new ReferenceError("subagent tool is not enabled for parent agent: " + tool);
-    }
-    out.push(tool);
-  }
   return out;
 }
 
@@ -78,7 +35,7 @@ export function createRunSubagentTool(options) {
 
   return createTool(
     "run_subagent",
-    "Run a synchronous child agent for a focused delegated task. The child uses its own session and returns its final answer. By default it receives read_file, list_dir, grep, and todo if those tools are enabled for the parent.",
+    "Run a synchronous child agent for a focused delegated task. The child uses its own session and returns its final answer. By default it receives every parent-enabled tool except create_skill, run_subagent, and run_skill.",
     {
       type: "object",
       required: ["task"],
@@ -95,7 +52,7 @@ export function createRunSubagentTool(options) {
     },
     function(args) {
       let maxTurns = args.maxTurns || 4;
-      let childTools = normalizeRequestedTools(parentAgent.tools, args.tools);
+      let childTools = childAgentTools(parentAgent.tools, args.tools);
       let session = createAgentSession(root);
       let childSystem = roleSystem(baseSystem, args.role, args.task);
       let childAgentConfig = cloneAgentConfig(parentAgent, childSystem, maxTurns);
@@ -119,7 +76,7 @@ export function createRunSubagentTool(options) {
         cwd: root,
         includeCodingTools: parentAgent.includeCodingTools,
         enabledTools: childTools,
-        includeDynamicTools: false,
+        includeDynamicTools: true,
         includeSessionArchiveTool: true,
         provider: createProvider(config, childAgentConfig),
         sessionFile: session.sessionFile,

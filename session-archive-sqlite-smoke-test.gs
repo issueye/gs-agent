@@ -1,4 +1,4 @@
-import { createSessionArchive } from "@/agent/session/archive";
+import { createSessionArchive, defaultArchiveFile } from "@/agent/session/archive";
 import { createSearchSessionArchiveTool } from "@/agent/tools/session-archive";
 
 let fs = require("@std/fs");
@@ -13,6 +13,8 @@ function assert(condition, message) {
 
 let suffix = String(Date.now());
 let file = path.join(process.cwd(), ".agent", "test-session-archive-" + suffix + ".db");
+let defaultFile = defaultArchiveFile(path.join(process.cwd(), ".agent", "sessions", "session-a", "session.jsonl"));
+assert(defaultFile.endsWith(path.join(".agent", "session-archive.db")), "default archive should be the shared sqlite database");
 if (fs.existsSync(file)) {
   fs.unlinkSync(file);
 }
@@ -23,7 +25,9 @@ if (fs.existsSync(file + "-shm")) {
   fs.unlinkSync(file + "-shm");
 }
 
-let archive = createSessionArchive(file);
+let archive = createSessionArchive(file, {
+  sessionId: "test-session",
+});
 archive.append({
   sessionId: "test-session",
   kind: "message",
@@ -38,6 +42,14 @@ archive.append({
   payload: {
     role: "assistant",
     content: "The final choice was green deployment.",
+  },
+});
+archive.append({
+  sessionId: "other-session",
+  kind: "message",
+  payload: {
+    role: "user",
+    content: "Other session should not appear in filtered search.",
   },
 });
 
@@ -58,6 +70,18 @@ let tool = createSearchSessionArchiveTool(file);
 let toolResult = tool.run({ query: "blue", maxResults: 2 });
 assert(toolResult.archiveDatabase === file, "tool should expose sqlite archive database path");
 assert(toolResult.results.length === 1, "tool should query sqlite archive");
+
+let filteredTool = createSearchSessionArchiveTool(file, {
+  sessionId: "test-session",
+});
+let filteredResult = filteredTool.run({ query: "other session", maxResults: 2 });
+assert(filteredResult.results.length === 0, "tool should filter by current session in shared sqlite archive");
+
+let otherArchive = createSessionArchive(file, {
+  sessionId: "other-session",
+});
+let otherResults = otherArchive.search({ query: "other session", maxResults: 2 });
+assert(otherResults.length === 1, "shared sqlite archive should still store other session rows");
 
 fs.unlinkSync(file);
 if (fs.existsSync(file + "-wal")) {

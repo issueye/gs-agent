@@ -47,23 +47,39 @@ function yamlString(value) {
 
 function defaultSkillContent(name, description) {
   let title = name;
+  let intro = "Use this skill when the user's request matches the description in the frontmatter.";
   if (description && description.trim() !== "") {
-    return "# " + title + "\n\n" + description.trim() + "\n\n## Instructions\n\n- Add the concrete workflow for this skill here.\n";
+    intro = description.trim();
   }
-  return "# " + title + "\n\n## Instructions\n\n- Add the concrete workflow for this skill here.\n";
+  return "# " + title + "\n\n" + intro + "\n\n## Instructions\n\n- Describe the concrete workflow for this skill.\n- Keep guidance concise and procedural.\n- Reference bundled scripts, references, or assets only when they are needed.\n";
 }
 
 function hasFrontmatter(content) {
   return String(content || "").replaceAll("\r\n", "\n").startsWith("---\n");
 }
 
+function bodyWithoutFrontmatter(content) {
+  let text = String(content || "").replaceAll("\r\n", "\n");
+  if (!hasFrontmatter(text)) {
+    return text;
+  }
+
+  let end = text.indexOf("\n---", 4);
+  if (end < 0) {
+    throw new TypeError("skill content frontmatter is not closed");
+  }
+
+  let body = text.slice(end + 4);
+  while (body.startsWith("\n")) {
+    body = body.slice(1);
+  }
+  return body;
+}
+
 function skillDocument(name, description, content) {
-  let body = String(content || "").trim();
+  let body = bodyWithoutFrontmatter(content).trim();
   if (!body || body === "") {
     body = defaultSkillContent(name, description).trim();
-  }
-  if (hasFrontmatter(body)) {
-    return body + "\n";
   }
   return "---\n"
     + "name: " + yamlString(name) + "\n"
@@ -75,21 +91,24 @@ function skillDocument(name, description, content) {
 export function createCreateSkillTool(cwd) {
   return createTool(
     "create_skill",
-    "Create a local agent skill under .agent/skills/<name>. Writes a SKILL.md file with YAML frontmatter name and description. Use overwrite=true only when replacing an existing skill intentionally.",
+    "Create a local agent skill under .agent/skills/<name>. Always writes exactly one standards-compliant .agent/skills/<name>/SKILL.md file. The SKILL.md YAML frontmatter contains only name and description. Never create skill.toml or main.gs for a skill. Use overwrite=true only when replacing an existing skill intentionally.",
     {
       type: "object",
-      required: ["name"],
+      required: ["name", "description"],
       additionalProperties: false,
       properties: {
         name: { type: "string", minLength: 1 },
-        description: { type: "string" },
+        description: { type: "string", minLength: 1 },
         content: { type: "string" },
         overwrite: { type: "boolean" },
       },
     },
     function(args) {
       let name = normalizeSkillName(args.name);
-      let description = args.description || "";
+      let description = String(args.description || "").trim();
+      if (description === "") {
+        throw new TypeError("skill description is required");
+      }
       let content = skillDocument(name, description, args.content);
 
       let skillDir = workspacePath(cwd, path.join(".agent", "skills", name));
