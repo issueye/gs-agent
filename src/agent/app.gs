@@ -158,6 +158,26 @@ function contextTokenThreshold(config, agent) {
   return undefined;
 }
 
+function imPluginConfig(app) {
+  if (!app || !app.config || !app.config.im) {
+    return {};
+  }
+  if (!app.config.im.plugin) {
+    return {};
+  }
+  return app.config.im.plugin;
+}
+
+function requireIMPlugin(app) {
+  try {
+    return require("@plugin/im-bot");
+  } catch (err) {
+    let cfg = imPluginConfig(app);
+    let command = cfg.command || ".agent/plugins/im-bot/gtp-imbot.exe";
+    throw new ReferenceError("IM bot plugin is not registered. Configure [im.plugin] in agent.local.toml and ensure the runtime starts " + command + " as @plugin/im-bot. Original error: " + String(err));
+  }
+}
+
 export function applyAgentSession(app, session) {
   app.sessionId = session.sessionId;
   app.sessionDir = session.sessionDir;
@@ -478,7 +498,7 @@ export function runAgentIMBridge(options) {
   }
   let plugin = options.plugin;
   if (!plugin && options.requirePlugin !== false) {
-    plugin = require("@plugin/im-bot");
+    plugin = requireIMPlugin(app);
   }
   let conversations = {};
 
@@ -551,7 +571,7 @@ export function runAgentIMBridge(options) {
 
   let attachment = attachIMBotToBus(bus, {
     plugin: plugin,
-    events: options.events,
+    events: options.events || imPluginConfig(app).events,
     requirePlugin: options.requirePlugin,
   });
   logger.info("agent IM bridge started", {

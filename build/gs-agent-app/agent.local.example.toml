@@ -20,3 +20,17 @@ timeoutMs = 60000
 retryCount = 3
 retryDelayMs = 500
 thinking = "disabled"
+
+[im.plugin]
+command = ".agent/plugins/im-bot/gtp-imbot.exe"
+args = []
+cwd = "."
+module = "@plugin/im-bot"
+events = ["message", "message_create", "im_message", "inbound_message"]
+
+# Configure adapters here when im-bot supports loading local adapter config.
+# [[im.adapters]]
+# name = "qq"
+# platform = "onebot"
+# baseUrl = "http://127.0.0.1:3000"
+# token = ""

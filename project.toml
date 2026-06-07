@@ -5,10 +5,3 @@ entry = "main.gs"
 
 [imports]
 "@/*" = "src/*.gs"
-
-[plugins.im_bot]
-command = "plugins/im-bot/gtp-imbot.exe"
-args = []
-cwd = "."
-modules = ["@plugin/im-bot"]
-capabilities = ["call", "event"]

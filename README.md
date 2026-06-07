@@ -79,7 +79,7 @@ E:\codes\gts\dist\gs.exe --timeout 0 run --im
 ```
 
 `--im` 会启动 `@plugin/im-bot`，监听插件入站消息事件，并通过 agent 内部事件总线转成 `agent_input`。agent 会按多轮对话处理该消息，默认把回答通过同一 IM 适配器发回。
-当前项目已在 `plugins/im-bot/gtp-imbot.exe` 集成编译后的 IM 机器人插件包，`project.toml` 会直接启动该插件，不依赖外部源码目录。
+打包后 IM 机器人插件位于 `.agent/plugins/im-bot/gtp-imbot.exe`；本地插件配置放在 `agent.local.toml` 的 `[im.plugin]` 中，不放入 `project.toml`。
 
 打包后的程序直接使用：
 
