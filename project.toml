@@ -7,8 +7,8 @@ entry = "main.gs"
 "@/*" = "src/*.gs"
 
 [plugins.im_bot]
-command = "go"
-args = ["run", "E:/codes/gts/cmd/gtp-imbot"]
-cwd = "E:/codes/gts"
+command = "plugins/im-bot/gtp-imbot.exe"
+args = []
+cwd = "."
 modules = ["@plugin/im-bot"]
 capabilities = ["call", "event"]

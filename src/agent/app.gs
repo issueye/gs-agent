@@ -1,10 +1,11 @@
 import { createCodingAgent } from "@/agent/core/kit";
 import { createProvider } from "@/agent/llm/providers";
 import { createRunLogger, eventLogFields, logPaths } from "@/agent/log";
-import { createAgentSession, readCurrentAgentSession, writeCurrentAgentSession } from "@/agent/session/manager";
+import { createAgentSession, getOrCreateIMAgentSession, readCurrentAgentSession, writeCurrentAgentSession } from "@/agent/session/manager";
+import { createJSONLSession } from "@/agent/session/jsonl";
 import { applySkillsToSystem, discoverSkills } from "@/agent/skills/loader";
 import { createEventBus } from "@/agent/events/bus";
-import { attachIMBotToBus, imMessagePrompt, sendIMReply } from "@/agent/im/bridge";
+import { attachIMBotToBus, imConversationKey, imMessagePrompt, sendIMReply } from "@/agent/im/bridge";
 import { createRunSkillTool } from "@/agent/tools/skill-runner";
 import { createRunSubagentTool } from "@/agent/tools/subagent";
 import { createWorkspaceTools } from "@/agent/tools/workspace";
@@ -471,10 +472,6 @@ export function runAgentIMBridge(options) {
   if (!logger) {
     logger = createRunLogger(app.root, "agent-im");
   }
-  if (!app.sessionId || !app.sessionFile) {
-    startAgentSession(app);
-  }
-
   let bus = options.bus;
   if (!bus) {
     bus = createEventBus();
@@ -483,25 +480,63 @@ export function runAgentIMBridge(options) {
   if (!plugin && options.requirePlugin !== false) {
     plugin = require("@plugin/im-bot");
   }
-  let messages = options.messages || [];
+  let conversations = {};
+
+  function conversationFor(input) {
+    let key = imConversationKey(input);
+    if (key === "") {
+      key = "im:default";
+    }
+    if (conversations[key]) {
+      return conversations[key];
+    }
+
+    let session = getOrCreateIMAgentSession(app.root, key, {
+      source: input.source,
+      platform: input.platform,
+      adapter: input.adapter,
+      openId: input.openId,
+      sender: input.sender,
+      chat: input.chat,
+      replyTo: input.replyTo,
+    });
+    let store = createJSONLSession(session.sessionFile, {
+      sessionId: session.sessionId,
+      archiveFile: session.sessionArchiveFile,
+    });
+    let messages = store.readMessages({
+      levels: ["primary", "working"],
+    });
+    conversations[key] = {
+      key: key,
+      session: session,
+      messages: messages,
+    };
+    return conversations[key];
+  }
 
   bus.on("agent_input", function(input) {
+    let conversation = conversationFor(input);
+    applyAgentSession(app, conversation.session);
     logger.info("agent input event", {
       source: input.source,
       platform: input.platform,
       adapter: input.adapter,
+      openId: input.openId,
       sender: input.sender,
       chat: input.chat,
+      conversation: conversation.key,
+      sessionFile: conversation.session.sessionFile,
     });
     let result = runAgentTurn({
       app: app,
       logger: logger,
       input: imMessagePrompt(input),
-      messages: messages,
+      messages: conversation.messages,
       onEvent: options.onEvent,
       isCancelled: options.isCancelled,
     });
-    messages = result.messages;
+    conversation.messages = result.messages;
     if (options.autoReply !== false && plugin) {
       sendIMReply(plugin, input, result.answer);
     }
@@ -520,8 +555,6 @@ export function runAgentIMBridge(options) {
     requirePlugin: options.requirePlugin,
   });
   logger.info("agent IM bridge started", {
-    sessionFile: app.sessionFile,
-    sessionArchiveFile: app.sessionArchiveFile,
     attached: attachment.attached,
     events: attachment.events.join(","),
   });
@@ -530,7 +563,7 @@ export function runAgentIMBridge(options) {
     app: app,
     bus: bus,
     plugin: plugin,
-    messages: messages,
+    conversations: conversations,
     attached: attachment.attached,
     events: attachment.events,
   };

@@ -1,5 +1,4 @@
 import { runAgentApp, runAgentIMBridge } from "@/agent/app";
-import { runAgentTui } from "@/tui/app";
 
 let process = require("@std/process");
 let timers = require("@std/timers");
@@ -16,6 +15,8 @@ function hasArg(name) {
 // GoScript 项目入口：加载配置、运行 agent，并把最终回答与会话位置打印出来。
 function main() {
   if (hasArg("--tui")) {
+    let tui = require("@/tui/app");
+    let runAgentTui = tui.runAgentTui;
     runAgentTui();
     return;
   }

@@ -31,6 +31,18 @@ function firstString(values) {
   return "";
 }
 
+function keyPart(value) {
+  let text = String(value || "").trim();
+  if (text === "") {
+    return "_";
+  }
+  text = text.replaceAll("\\", "_");
+  text = text.replaceAll("/", "_");
+  text = text.replaceAll(":", "_");
+  text = text.replaceAll("|", "_");
+  return text;
+}
+
 function eventData(event) {
   if (!event) {
     return {};
@@ -42,6 +54,27 @@ function eventData(event) {
     return event.payload;
   }
   return event;
+}
+
+export function imConversationKey(input) {
+  if (!input) {
+    return "";
+  }
+  let identity = firstString([
+    input.openId,
+    input.sender,
+    input.replyTo,
+    input.chat,
+  ]);
+  if (identity === "") {
+    return "";
+  }
+  return [
+    "im",
+    keyPart(input.platform),
+    keyPart(input.adapter),
+    keyPart(identity),
+  ].join(":");
 }
 
 export function normalizeIMMessage(event) {
@@ -88,6 +121,21 @@ export function normalizeIMMessage(event) {
     field(message, "user_id"),
     field(message, "open_id"),
   ]);
+  let openId = firstString([
+    field(data, "openId"),
+    field(data, "openid"),
+    field(data, "open_id"),
+    field(data, "userOpenId"),
+    field(data, "unionId"),
+    field(data, "union_id"),
+    field(message, "openId"),
+    field(message, "openid"),
+    field(message, "open_id"),
+    field(message, "userOpenId"),
+    field(message, "unionId"),
+    field(message, "union_id"),
+    sender,
+  ]);
   let chat = firstString([
     field(data, "chat"),
     field(data, "chatId"),
@@ -109,6 +157,7 @@ export function normalizeIMMessage(event) {
     source: "im",
     adapter: adapter,
     platform: platform,
+    openId: openId,
     sender: sender,
     chat: chat,
     replyTo: replyTo,
@@ -131,6 +180,9 @@ export function imMessagePrompt(input) {
   }
   if (input.sender) {
     lines.push("From: " + input.sender);
+  }
+  if (input.openId && input.openId !== input.sender) {
+    lines.push("OpenID: " + input.openId);
   }
   lines.push("");
   lines.push(input.text);
