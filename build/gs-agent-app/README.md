@@ -62,7 +62,7 @@ thinking = "disabled"
 E:\codes\gts\dist\gs.exe --timeout 60s run
 ```
 
-运行后会在 `.agent/sessions/<session-id>/` 下生成独立的 `session.jsonl`、`session.messages.jsonl` 和 `answer.md`，不会覆盖旧会话。
+运行后会在 `.agent/sessions/<session-id>/` 下生成独立的 `session.jsonl`、`session.messages.db` 和 `answer.md`，不会覆盖旧会话。
 最近一次会话位置会记录到 `.agent/current-session.json`。
 运行日志会写入 `.agent/logs/gs-agent.log`，最近一次启动/运行的日志会写入 `.agent/logs/latest.log`。
 
@@ -71,6 +71,14 @@ E:\codes\gts\dist\gs.exe --timeout 60s run
 ```powershell
 E:\codes\gts\dist\gs.exe --timeout 0 run --tui
 ```
+
+运行 IM 机器人桥接：
+
+```powershell
+E:\codes\gts\dist\gs.exe --timeout 0 run --im
+```
+
+`--im` 会启动 `@plugin/im-bot`，监听插件入站消息事件，并通过 agent 内部事件总线转成 `agent_input`。agent 会按多轮对话处理该消息，默认把回答通过同一 IM 适配器发回。
 
 打包后的程序直接使用：
 
@@ -231,6 +239,24 @@ exports.run = function(input) {
 ```powershell
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 ```
+
+## IM 机器人事件总线
+
+项目内置了一个中间事件总线，IM 插件事件不会直接调用 agent，而是先规范化为：
+
+```javascript
+{
+  source: "im",
+  platform: "onebot",
+  adapter: "qq-local",
+  sender: "user-id",
+  chat: "group-or-chat-id",
+  replyTo: "target-id",
+  text: "用户消息原文"
+}
+```
+
+`src/agent/im/bridge.gs` 默认监听 `message`、`message_create`、`im_message` 和 `inbound_message`。语言层 IM 插件发来的消息进入总线后，会触发 `agent_input`，再由 `runAgentIMBridge` 调用现有 `runAgentTurn`。
 
 ## 技能系统
 

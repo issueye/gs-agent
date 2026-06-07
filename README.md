@@ -41,7 +41,7 @@ includeSubagents = true
 includeSkills = true
 skillDir = ".agent/skills"
 skills = ["*"]
-tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"]
+tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent", "run_skill"]
 
 [llm.anthropic]
 apiKey = "sk-..."
@@ -71,6 +71,14 @@ E:\codes\gts\dist\gs.exe --timeout 60s run
 ```powershell
 E:\codes\gts\dist\gs.exe --timeout 0 run --tui
 ```
+
+运行 IM 机器人桥接：
+
+```powershell
+E:\codes\gts\dist\gs.exe --timeout 0 run --im
+```
+
+`--im` 会启动 `@plugin/im-bot`，监听插件入站消息事件，并通过 agent 内部事件总线转成 `agent_input`。agent 会按多轮对话处理该消息，默认把回答通过同一 IM 适配器发回。
 
 打包后的程序直接使用：
 
@@ -171,17 +179,18 @@ E:\codes\gts\dist\gs.exe --timeout 60s dist programs\gs-tui-test dist\gs-tui-tes
 默认启用只读代码工具和 todo 任务工具：
 
 ```toml
-tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"]
+tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent", "run_skill"]
 ```
 
 启用 `todo` 后，模型可以用单个 `todo` 工具管理 `.agent/todos.json` 中的任务，支持 `add`、`list`、`get`、`update`、`delete` 和 `clear`。任务状态为 `open` 或 `done`，`list` 和 `clear` 可按 `status` 过滤。
 启用 `create_skill` 后，模型可以创建带 YAML frontmatter 的 `.agent/skills/<name>/SKILL.md`，用于沉淀新的本地技能。
 启用 `run_subagent` 后，模型可以把聚焦任务委派给一个同步子 agent；子 agent 使用独立 session，默认只拿父 agent 已启用的 `read_file`、`list_dir`、`grep` 和 `todo`。
+启用 `run_skill` 后，模型在命中技能索引时可以把技能名和任务交给同步子 agent；子 agent 的 system prompt 会包含对应 `SKILL.md` 全文，并返回最终结果。
 
 如需让 agent 写文件或执行 shell 命令，可显式加入：
 
 ```toml
-tools = ["read_file", "list_dir", "grep", "write_file", "append_file", "bash", "todo", "create_skill", "run_subagent"]
+tools = ["read_file", "list_dir", "grep", "write_file", "append_file", "bash", "todo", "create_skill", "run_subagent", "run_skill"]
 ```
 
 ## 动态工具
@@ -232,9 +241,27 @@ exports.run = function(input) {
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 ```
 
+## IM 机器人事件总线
+
+项目内置了一个中间事件总线，IM 插件事件不会直接调用 agent，而是先规范化为：
+
+```javascript
+{
+  source: "im",
+  platform: "onebot",
+  adapter: "qq-local",
+  sender: "user-id",
+  chat: "group-or-chat-id",
+  replyTo: "target-id",
+  text: "用户消息原文"
+}
+```
+
+`src/agent/im/bridge.gs` 默认监听 `message`、`message_create`、`im_message` 和 `inbound_message`。语言层 IM 插件发来的消息进入总线后，会触发 `agent_input`，再由 `runAgentIMBridge` 调用现有 `runAgentTurn`。
+
 ## 技能系统
 
-agent 会自动发现 `.agent/skills/*/SKILL.md`。按照 Skills 规范，启动时只把技能的 `name`、`description`、`trigger_keywords` 和文件路径作为索引注入 system prompt；当用户请求命中某个技能时，模型再读取该技能的 `SKILL.md` 完整内容并按其中说明执行。
+agent 会自动发现 `.agent/skills/*/SKILL.md`。按照 Skills 规范，启动时只把技能的 `name`、`description`、`trigger_keywords` 和文件路径作为索引注入 system prompt；当用户请求命中某个技能且 `run_skill` 可用时，模型会调用 `run_skill`，由同步子 agent 读取该技能的 `SKILL.md` 全文并按其中说明执行。若未启用 `run_skill`，模型仍可按索引路径渐进读取技能文件。
 
 `SKILL.md` 顶部必须包含 YAML frontmatter。`name` 只能使用小写字母、数字和连字符，最长 64 个字符，且不能以连字符开头或结尾；`description` 必填，用来判断技能何时触发。
 
@@ -285,7 +312,23 @@ skills = ["code-review", "docs"]
 ```powershell
 E:\codes\gts\dist\gs.exe --timeout 20s skill-system-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s run-skill-smoke-test.gs
 ```
+
+`run_skill` 工具参数：
+
+```json
+{
+  "skill": "code-review",
+  "task": "Review the current changes.",
+  "maxTurns": 6,
+  "tools": ["read_file", "list_dir", "grep"]
+}
+```
+
+- `skill` 和 `task` 必填。
+- `maxTurns` 可选，范围 1 到 12，默认 6。
+- `tools` 可选；只能从父 agent 已启用的工具里选，且不会把 `run_skill` 或 `run_subagent` 继续传给子 agent。
 
 ## Subagent
 
@@ -313,7 +356,7 @@ E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
 ```toml
 [agent]
 includeSubagents = true
-tools = ["read_file", "list_dir", "grep", "todo", "run_subagent"]
+tools = ["read_file", "list_dir", "grep", "todo", "run_subagent", "run_skill"]
 ```
 
 本地自检：
@@ -333,6 +376,7 @@ E:\codes\gts\dist\gs.exe --timeout 20s dynamic-tool-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s skill-system-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s subagent-smoke-test.gs
+E:\codes\gts\dist\gs.exe --timeout 20s run-skill-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s markdown-stdlib-smoke-test.gs
 E:\codes\gts\dist\gs.exe --timeout 20s provider-test.gs

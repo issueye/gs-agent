@@ -51,7 +51,7 @@ assert(!rendered.includes("Use this when testing skill progressive loading."), "
 
 let system = applySkillsToSystem("Base system.", selected);
 assert(system.includes("Base system."), "base system should be preserved");
-assert(system.includes("read its SKILL.md file before acting"), "skill index instructions should be appended");
+assert(system.includes("call run_skill with the skill name and task"), "skill index instructions should prefer run_skill");
 
 let disabled = discoverSkills(root, {
   includeSkills: false,

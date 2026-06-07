@@ -1,7 +1,8 @@
-import { runAgentApp } from "@/agent/app";
+import { runAgentApp, runAgentIMBridge } from "@/agent/app";
 import { runAgentTui } from "@/tui/app";
 
 let process = require("@std/process");
+let timers = require("@std/timers");
 
 function hasArg(name) {
   for (let arg of process.argv) {
@@ -17,6 +18,16 @@ function main() {
   if (hasArg("--tui")) {
     runAgentTui();
     return;
+  }
+
+  if (hasArg("--im")) {
+    let bridge = runAgentIMBridge({});
+    println("im bridge started");
+    println("events=" + bridge.events.join(","));
+    println("session=" + bridge.app.sessionFile);
+    while (true) {
+      timers.sleep(1000);
+    }
   }
 
   let result = runAgentApp();

@@ -238,7 +238,8 @@ export function renderSkillsSystem(skills) {
   return "Available skills (metadata only):\n"
     + "Each skill is a folder containing SKILL.md with YAML frontmatter. "
     + "Use a skill when the user's request matches its name, description, or trigger keywords. "
-    + "When a skill is relevant, read its SKILL.md file before acting and follow its Markdown instructions. "
+    + "When run_skill is available and a skill is relevant, call run_skill with the skill name and task so a subagent can execute that skill. "
+    + "If run_skill is not available, read its SKILL.md file before acting and follow its Markdown instructions. "
     + "Do not load every skill body up front; use progressive disclosure.\n\n"
     + blocks.join("\n");
 }

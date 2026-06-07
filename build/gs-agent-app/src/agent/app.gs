@@ -3,6 +3,8 @@ import { createProvider } from "@/agent/llm/providers";
 import { createRunLogger, eventLogFields, logPaths } from "@/agent/log";
 import { createAgentSession, readCurrentAgentSession, writeCurrentAgentSession } from "@/agent/session/manager";
 import { applySkillsToSystem, discoverSkills } from "@/agent/skills/loader";
+import { createEventBus } from "@/agent/events/bus";
+import { attachIMBotToBus, imMessagePrompt, sendIMReply } from "@/agent/im/bridge";
 import { createRunSubagentTool } from "@/agent/tools/subagent";
 import { createWorkspaceTools } from "@/agent/tools/workspace";
 
@@ -437,6 +439,83 @@ export function runAgentTurn(options) {
     });
     throw err;
   }
+}
+
+export function runAgentIMBridge(options) {
+  if (!options) {
+    options = {};
+  }
+  let app = options.app;
+  if (!app) {
+    app = loadAgentApp(options.root);
+  }
+  let logger = options.logger;
+  if (!logger) {
+    logger = createRunLogger(app.root, "agent-im");
+  }
+  if (!app.sessionId || !app.sessionFile) {
+    startAgentSession(app);
+  }
+
+  let bus = options.bus;
+  if (!bus) {
+    bus = createEventBus();
+  }
+  let plugin = options.plugin;
+  if (!plugin && options.requirePlugin !== false) {
+    plugin = require("@plugin/im-bot");
+  }
+  let messages = options.messages || [];
+
+  bus.on("agent_input", function(input) {
+    logger.info("agent input event", {
+      source: input.source,
+      platform: input.platform,
+      adapter: input.adapter,
+      sender: input.sender,
+      chat: input.chat,
+    });
+    let result = runAgentTurn({
+      app: app,
+      logger: logger,
+      input: imMessagePrompt(input),
+      messages: messages,
+      onEvent: options.onEvent,
+      isCancelled: options.isCancelled,
+    });
+    messages = result.messages;
+    if (options.autoReply !== false && plugin) {
+      sendIMReply(plugin, input, result.answer);
+    }
+    if (options.onAnswer) {
+      options.onAnswer({
+        input: input,
+        answer: result.answer,
+        result: result,
+      });
+    }
+  });
+
+  let attachment = attachIMBotToBus(bus, {
+    plugin: plugin,
+    events: options.events,
+    requirePlugin: options.requirePlugin,
+  });
+  logger.info("agent IM bridge started", {
+    sessionFile: app.sessionFile,
+    sessionArchiveFile: app.sessionArchiveFile,
+    attached: attachment.attached,
+    events: attachment.events.join(","),
+  });
+
+  return {
+    app: app,
+    bus: bus,
+    plugin: plugin,
+    messages: messages,
+    attached: attachment.attached,
+    events: attachment.events,
+  };
 }
 
 // 保持现有命令行入口行为不变。

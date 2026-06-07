@@ -7,7 +7,7 @@ includeSubagents = true
 includeSkills = true
 skillDir = ".agent/skills"
 skills = ["*"]
-tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent"]
+tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent", "run_skill"]
 taskFile = "workspace/task.txt"
 
 [llm.anthropic]

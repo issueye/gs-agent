@@ -5,3 +5,10 @@ entry = "main.gs"
 
 [imports]
 "@/*" = "src/*.gs"
+
+[plugins.im_bot]
+command = "go"
+args = ["run", "E:/codes/gts/cmd/gtp-imbot"]
+cwd = "E:/codes/gts"
+modules = ["@plugin/im-bot"]
+capabilities = ["call", "event"]
