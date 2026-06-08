@@ -30,10 +30,6 @@ export function defaultConfig() {
     scheduler: {
       enabled: true,
     },
-    agentBridge: {
-      defaultMode: "fake",
-      allowReal: false,
-    },
   };
 }
 
@@ -46,7 +42,6 @@ export function loadConfig() {
     cfg.gateway = mergeObject(cfg.gateway, parsed.gateway);
     cfg.im = mergeObject(cfg.im, parsed.im);
     cfg.scheduler = mergeObject(cfg.scheduler, parsed.scheduler);
-    cfg.agentBridge = mergeObject(cfg.agentBridge, parsed.agentBridge);
   }
 
   cfg.root = root;

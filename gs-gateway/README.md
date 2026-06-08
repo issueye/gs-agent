@@ -49,10 +49,6 @@ port = 8787
 dataDir = ".gateway"
 database = ".gateway/gateway.db"
 agentRoot = "../gs-agent"
-
-[agentBridge]
-defaultMode = "fake"
-allowReal = false
 ```
 
 `agentRoot` 默认指向同级目录的 `gs-agent`。
@@ -79,7 +75,7 @@ allowReal = false
 | POST | `/api/tasks` | 创建网关任务 |
 | GET | `/api/tasks/:id` | 读取任务 |
 | PATCH | `/api/tasks/:id` | 更新任务状态和结果 |
-| POST | `/api/tasks/:id/run` | 运行任务；支持 `dryRun:true`、`mode:"fake"`，后续接 `mode:"real"` |
+| POST | `/api/tasks/:id/run` | 运行任务；直接派发到真实 `gs-agent` |
 | GET | `/api/schedules` | 定时计划列表 |
 | POST | `/api/schedules` | 创建定时计划 |
 | GET | `/api/schedules/:id` | 读取定时计划 |
@@ -97,9 +93,11 @@ Invoke-RestMethod `
   -Body '{"platform":"onebot","adapter":"qq-local","sender":"10001","chat":"dev","text":"帮我查看当前任务"}'
 ```
 
-返回中会包含事件记录和新建任务。任务可通过 `/api/tasks/:id/run` 派发给 `gs-agent/gateway-task.gs`。当前 `mode:"fake"` 会创建真实 agent session 文件但不调用模型，适合联调；`mode:"real"` 会调用现有 agent 运行链路，需要本地模型配置可用。
+返回中会包含事件记录和新建任务。任务可通过 `/api/tasks/:id/run` 派发给 `gs-agent/gateway-task.gs`。
+网关不再提供 `fake`、`dryRun` 或 `allowReal` 分支；运行任务会直接进入真实 agent 链路，并要求 `gs-agent/agent.local.toml` 中存在可用模型配置。
 
-为避免误触发真实模型调用，`mode:"real"` 默认禁用。需要在 `gateway.toml` 设置 `[agentBridge].allowReal = true`，或请求体传入 `allowReal:true`。每次运行都会写入 `agent_bridge` 事件，便于桌面端审计。
+每次运行都会写入 `agent_bridge` 事件，便于桌面端审计。
+网关与 agent 的功能边界见 `docs/gateway-agent-boundary.md`。
 
 ## 迁移计划
 
@@ -115,3 +113,6 @@ docs/migration-development-plan.md
 cd E:\codes\gts_codes\gs-gateway
 E:\codes\gts\dist\gs.exe --timeout 20s smoke-test.gs
 ```
+
+当前 smoke test 会验证网关记录、技能管理、调度和真实 agent 桥接错误处理。
+如果本机没有 `gs-agent/agent.local.toml`，桥接部分预期会失败并被记录为 `agent_bridge failed` 事件。

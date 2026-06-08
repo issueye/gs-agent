@@ -68,56 +68,46 @@ function main() {
   });
   assertOK(due.tasks.length >= 1, "due schedule should create a task");
 
-  let bridgeTask = store.createTask({
-    name: "bridge dry run",
-    kind: "agent.dry_run",
-    payload: {
-      text: "dry run",
-    },
-  });
-  let bridgeResult = model.agentBridge.runTask(bridgeTask.id, {
-    dryRun: true,
-  });
-  assertOK(bridgeResult.status === "done", "bridge dry-run should finish task");
-
   let agentTask = store.createTask({
-    name: "bridge fake agent",
-    kind: "agent.fake",
-    payload: {
-      text: "fake agent run",
-    },
-  });
-  let agentResult = model.agentBridge.runTask(agentTask.id, {
-    mode: "fake",
-  });
-  assertOK(agentResult.status === "done", "bridge fake agent should finish task");
-  assertOK(agentResult.result.mode === "fake", "fake agent mode should be recorded");
-
-  let realBlocked = false;
-  let blockedTask = store.createTask({
-    name: "bridge real blocked",
+    name: "bridge real agent",
     kind: "agent.real",
     payload: {
-      text: "should be blocked",
+      text: "real agent run",
     },
   });
+  let agentBridgeFailed = false;
+  let agentBridgeError = "";
   try {
-    model.agentBridge.runTask(blockedTask.id, {
-      mode: "real",
-    });
+    model.agentBridge.runTask(agentTask.id);
   } catch (error) {
-    realBlocked = true;
+    agentBridgeFailed = true;
+    agentBridgeError = error.message || String(error);
   }
-  assertOK(realBlocked, "real bridge should be blocked by default");
+  let agentResult = store.getTask(agentTask.id);
+  if (agentBridgeFailed) {
+    assertOK(agentResult.status === "failed", "bridge should persist failed task when real agent cannot run");
+    assertOK(agentResult.result.error.message === agentBridgeError, "bridge failure should persist the surfaced error");
+  } else {
+    assertOK(agentResult.status === "done", "bridge should finish task when real agent config is available");
+    assertOK(agentResult.result.ok === true, "bridge success should return an ok agent result");
+  }
 
   let bridgeEvents = store.listEvents(20);
+  let sawBridgeFailed = false;
   let sawBridgeDone = false;
   for (let event of bridgeEvents) {
+    if (event.source === "agent_bridge" && event.type === "failed") {
+      sawBridgeFailed = true;
+    }
     if (event.source === "agent_bridge" && event.type === "done") {
       sawBridgeDone = true;
     }
   }
-  assertOK(sawBridgeDone, "bridge should record done event");
+  if (agentBridgeFailed) {
+    assertOK(sawBridgeFailed, "bridge should record failed event");
+  } else {
+    assertOK(sawBridgeDone, "bridge should record done event");
+  }
 
   let skills = model.agent.listSkills();
   let tools = model.agent.listDynamicTools();
@@ -128,8 +118,7 @@ function main() {
   println("skills=" + String(skills.length) + " tools=" + String(tools.length) + " plugins=" + String(plugins.length));
   println("task=" + task.id + " status=" + task.status);
   println("schedule=" + schedule.id + " dueTasks=" + String(due.tasks.length));
-  println("bridge=" + bridgeResult.id + " status=" + bridgeResult.status);
-  println("agentBridge=" + agentResult.id + " mode=" + agentResult.result.mode);
+  println("agentBridge=" + agentResult.id + " status=" + agentResult.status);
 }
 
 main();

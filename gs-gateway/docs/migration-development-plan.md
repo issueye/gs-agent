@@ -69,7 +69,8 @@ Add a gateway-side bridge module that can:
 - Call a configurable agent command or script later.
 - Mark task as `done` or `failed`.
 
-First version should not require real LLM execution. It can support a dry-run mode and persist run attempts.
+Historical note: the first version did not require real LLM execution and supported dry-run style attempts.
+That behavior has been removed. The current gateway bridge delegates directly to the real `gs-agent` runtime.
 
 ## Phase 2: gs-agent Execution Contract
 
@@ -101,10 +102,10 @@ Status:
 
 - Added `gs-agent/gateway-task.gs`.
 - `gs-gateway` now calls it through `@std/runtime.callScript`.
-- `mode: "fake"` creates a real agent session and answer file without calling an LLM.
-- `mode: "real"` is wired to the existing `runAgentTask` path and requires a valid local model configuration.
-- Real execution is guarded by `[agentBridge].allowReal`; disabled requests return `REAL_AGENT_DISABLED`.
-- Every bridge run records `agent_bridge` events for start, done, failed, or blocked.
+- Gateway task execution is wired to the existing `runAgentTask` path and requires a valid local model configuration.
+- The gateway no longer accepts `mode`, `dryRun`, or `allowReal` controls.
+- Missing or invalid model configuration is persisted as a failed gateway task and `agent_bridge failed` event.
+- Every bridge run records `agent_bridge` events for start, done, or failed.
 
 ## Phase 3: Move External Integrations
 
@@ -160,7 +161,7 @@ Minimum:
 - Skill create/list/read/update/delete works.
 - Schedule create/list/update/delete works.
 - IM inbound still creates pending task.
-- Agent bridge dry-run can mark a task `done`.
+- Agent bridge dispatch records `start` and records either `done` or `failed`.
 
 Commands:
 

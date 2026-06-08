@@ -9,7 +9,3 @@ enabled = true
 
 [scheduler]
 enabled = true
-
-[agentBridge]
-defaultMode = "fake"
-allowReal = false
