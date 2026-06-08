@@ -2,11 +2,15 @@ import { loadAgentApp, runAgentTask } from "@/agent/app";
 import { imMessagePrompt } from "@/agent/im/bridge";
 
 function gatewayTaskText(task) {
-  let input = task || {};
-  if (input.kind === "agent.im") {
-    return imMessagePrompt(input.payload.im);
+  let taskInput = (task && task.input) ? task.input : {};
+  if (task.kind === "agent.im") {
+    return imMessagePrompt(taskInput.im || taskInput);
   }
-  return String(input.payload.text || "");
+  let text = String(taskInput.text || "");
+  if (text === "") {
+    throw new Error("gateway task input.text is required");
+  }
+  return text;
 }
 
 export function runGatewayTask(task) {

@@ -5,8 +5,7 @@
 ## 结构
 
 - `main.gs`：应用入口；默认运行一次 agent，传入 `--tui` 时进入交互式界面。
-- `agent.toml`：默认运行配置，使用 Anthropic 兼容 provider。
-- `agent.local.toml`：本地密钥配置，已被 `.gitignore` 忽略。
+- `agent.toml`：运行配置，使用 Anthropic 兼容 provider，并包含模型密钥。
 - `workspace/task.txt`：当前任务输入。
 - `src/agent/core`：agent loop 和组装入口。
 - `src/agent/llm`：Anthropic 兼容 provider，以及显式测试用 fake provider。
@@ -23,13 +22,7 @@
 
 ## 运行
 
-先准备本地配置：
-
-```powershell
-Copy-Item .\agent.local.example.toml .\agent.local.toml
-```
-
-填入 `agent.local.toml` 中的 `apiKey`。当前 DeepSeek Anthropic 兼容配置形如：
+先在 `agent.toml` 中填入 `apiKey`。当前 DeepSeek Anthropic 兼容配置形如：
 
 ```toml
 [agent]
@@ -79,7 +72,7 @@ E:\codes\gts\dist\gs.exe --timeout 0 run --im
 ```
 
 `--im` 会启动 `@plugin/im-bot`，监听插件入站消息事件，并通过 agent 内部事件总线转成 `agent_input`。agent 会按多轮对话处理该消息，默认把回答通过同一 IM 适配器发回。
-打包后 IM 机器人插件位于 `.agent/plugins/im-bot/gtp-imbot.exe`；本地插件配置放在 `agent.local.toml` 的 `[im.plugin]` 中，不放入 `project.toml`。
+打包后 IM 机器人插件位于 `.agent/plugins/im-bot/gtp-imbot.exe`；插件配置放在 `agent.toml` 的 `[im.plugin]` 中，不放入 `project.toml`。
 
 打包后的程序直接使用：
 
@@ -87,7 +80,7 @@ E:\codes\gts\dist\gs.exe --timeout 0 run --im
 .\dist\gs-agent.exe --tui
 ```
 
-打包后 `agent.toml` 和 `agent.local.example.toml` 会复制到 `gs-agent.exe` 所在目录；程序默认从自身所在目录读取配置，而不是从启动命令的当前目录读取。
+打包后 `agent.toml` 会复制到 `gs-agent.exe` 所在目录；程序默认从自身所在目录读取配置，而不是从启动命令的当前目录读取。
 
 打包：
 

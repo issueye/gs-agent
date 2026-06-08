@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>gs-gateway Chat Test</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1f252e;
+      --muted: #697586;
+      --line: #d9e1ea;
+      --paper: #f6f8fb;
+      --panel: #ffffff;
+      --accent: #0c7bdc;
+      --accent-ink: #ffffff;
+      --ok: #147a3d;
+      --warn: #a15c00;
+      --danger: #b42318;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(12, 123, 220, 0.06) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(12, 123, 220, 0.05) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      color: var(--ink);
+      font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      letter-spacing: 0;
+    }
+
+    .shell {
+      width: min(1180px, calc(100vw - 32px));
+      min-height: calc(100vh - 32px);
+      margin: 16px auto;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 18px 52px rgba(31, 37, 46, 0.12);
+    }
+
+    aside {
+      border-right: 1px solid var(--line);
+      background: rgba(250, 252, 255, 0.92);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    main {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+
+    .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    label {
+      display: block;
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    input, textarea, button {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding: 9px 10px;
+      outline: none;
+      border-radius: 6px;
+    }
+
+    input:focus, textarea:focus {
+      border-color: rgba(12, 123, 220, 0.55);
+      box-shadow: 0 0 0 3px rgba(12, 123, 220, 0.12);
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .status {
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .status strong {
+      display: block;
+      color: var(--ink);
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .topbar {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.74);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: var(--muted);
+      font-size: 12px;
+      background: #fff;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--warn);
+    }
+
+    .dot.ok {
+      background: var(--ok);
+    }
+
+    .dot.fail {
+      background: var(--danger);
+    }
+
+    .messages {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .msg {
+      width: min(780px, 92%);
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 11px 12px;
+      box-shadow: 0 6px 18px rgba(31, 37, 46, 0.05);
+    }
+
+    .msg.user {
+      align-self: flex-end;
+      border-color: rgba(12, 123, 220, 0.24);
+      background: #eef6ff;
+    }
+
+    .msg.agent {
+      align-self: flex-start;
+    }
+
+    .msg.system {
+      width: 100%;
+      box-shadow: none;
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .text {
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.55;
+      font-size: 14px;
+    }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 14px 18px 18px;
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .composer-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    textarea {
+      min-height: 72px;
+      max-height: 180px;
+      resize: vertical;
+    }
+
+    button {
+      border: 0;
+      border-radius: 6px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      padding: 10px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      min-width: 92px;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.58;
+    }
+
+    .secondary {
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      min-width: 0;
+      padding: 8px 10px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 820px) {
+      .shell {
+        width: 100vw;
+        min-height: 100vh;
+        margin: 0;
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .composer-row {
+        grid-template-columns: 1fr;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div>
+        <h1>Gateway Chat Test</h1>
+        <div class="sub">通过网关 IM 入站接口创建任务，再调用 Agent bridge 获取真实回复。</div>
+      </div>
+
+      <div>
+        <div class="field">
+          <label for="platform">平台</label>
+          <input id="platform" value="web-chat">
+        </div>
+        <div class="field">
+          <label for="adapter">适配器</label>
+          <input id="adapter" value="browser">
+        </div>
+        <div class="field">
+          <label for="sender">发送者</label>
+          <input id="sender" value="tester">
+        </div>
+        <div class="field">
+          <label for="chat">会话 ID</label>
+          <input id="chat" value="browser-chat-001">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="secondary" id="healthBtn" type="button">检查网关</button>
+        <button class="secondary" id="clearBtn" type="button">清空消息</button>
+      </div>
+
+      <div class="status" id="status">
+        <strong>未连接</strong>
+        等待检查网关状态。
+      </div>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div>
+          <strong>对话测试</strong>
+          <div class="sub">同一会话 ID 会写入同一个 gateway conversation。</div>
+        </div>
+        <div class="badge"><span class="dot" id="dot"></span><span id="badgeText">idle</span></div>
+      </div>
+
+      <div class="messages" id="messages">
+        <div class="msg system">
+          <div class="text">输入一条消息后，页面会依次调用 inbound、run task，并展示 Agent 返回内容。</div>
+        </div>
+      </div>
+
+      <form class="composer" id="form">
+        <div class="composer-row">
+          <textarea id="message" placeholder="输入测试消息，例如：请只回复“聊天页面链路成功”。"></textarea>
+          <button id="sendBtn" type="submit">发送</button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const messages = $("messages");
+    const form = $("form");
+    const sendBtn = $("sendBtn");
+    const statusBox = $("status");
+    const dot = $("dot");
+    const badgeText = $("badgeText");
+
+    function setStatus(title, detail, tone = "idle") {
+      statusBox.innerHTML = `<strong>${escapeHtml(title)}</strong>${escapeHtml(detail)}`;
+      dot.className = "dot" + (tone === "ok" ? " ok" : tone === "fail" ? " fail" : "");
+      badgeText.textContent = tone;
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function addMessage(role, text, meta) {
+      const node = document.createElement("div");
+      node.className = `msg ${role}`;
+      node.innerHTML = `
+        <div class="meta">
+          <span>${escapeHtml(role === "user" ? "你" : role === "agent" ? "Agent" : "系统")}</span>
+          <span>${escapeHtml(meta || new Date().toLocaleTimeString())}</span>
+        </div>
+        <div class="text">${escapeHtml(text)}</div>
+      `;
+      messages.appendChild(node);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function requestJson(url, options = {}) {
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        const message = data?.error?.message || `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    async function checkHealth() {
+      setStatus("检查中", "正在读取 /health。");
+      try {
+        const data = await requestJson("/health", { method: "GET", headers: {} });
+        setStatus("网关在线", `agentRoot: ${data.data.agent.root}`, "ok");
+      } catch (error) {
+        setStatus("网关不可用", error.message, "fail");
+      }
+    }
+
+    async function sendMessage(text) {
+      const payload = {
+        platform: $("platform").value.trim() || "web-chat",
+        adapter: $("adapter").value.trim() || "browser",
+        sender: $("sender").value.trim() || "tester",
+        chat: $("chat").value.trim() || "browser-chat-001",
+        messageId: `web-${Date.now()}`,
+        text,
+      };
+
+      addMessage("user", text, payload.chat);
+      setStatus("创建任务", "正在写入 IM inbound。");
+
+      const inbound = await requestJson("/api/im/inbound", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      const taskId = inbound.data.task.id;
+      setStatus("运行 Agent", `task: ${taskId}`);
+
+      const run = await requestJson(`/api/tasks/${encodeURIComponent(taskId)}/run`, {
+        method: "POST",
+        body: "{}",
+      });
+
+      const task = run.data;
+      const answer = task?.result?.answer || "(无回答)";
+      addMessage("agent", answer, `task ${taskId} · ${task.status}`);
+      setStatus("完成", `session: ${task?.result?.sessionId || ""}`, "ok");
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = $("message").value.trim();
+      if (!text) return;
+      $("message").value = "";
+      sendBtn.disabled = true;
+      try {
+        await sendMessage(text);
+      } catch (error) {
+        addMessage("system", error.message, "error");
+        setStatus("请求失败", error.message, "fail");
+      } finally {
+        sendBtn.disabled = false;
+        $("message").focus();
+      }
+    });
+
+    $("healthBtn").addEventListener("click", checkHealth);
+    $("clearBtn").addEventListener("click", () => {
+      messages.innerHTML = "";
+      addMessage("system", "消息已清空。", "local");
+    });
+
+    checkHealth();
+  </script>
+</body>
+</html>

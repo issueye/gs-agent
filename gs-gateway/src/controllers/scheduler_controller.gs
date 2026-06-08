@@ -33,8 +33,20 @@ export function createSchedulerController(model) {
     return ok(res, schedule);
   }
 
-  function runDue(req, res) {
-    return ok(res, model.dueToTasks(req.body || req.query || {}));
+  function tick(req, res) {
+    return ok(res, model.tick(req.body || req.query || {}));
+  }
+
+  function run(req, res) {
+    let result = model.run(req.params.id, req.body || req.query || {});
+    if (!result) {
+      return fail(res, 404, "NOT_FOUND", "schedule not found");
+    }
+    return ok(res, result);
+  }
+
+  function status(req, res) {
+    return ok(res, model.status());
   }
 
   return {
@@ -43,6 +55,8 @@ export function createSchedulerController(model) {
     get: get,
     update: update,
     remove: remove,
-    runDue: runDue,
+    tick: tick,
+    run: run,
+    status: status,
   };
 }

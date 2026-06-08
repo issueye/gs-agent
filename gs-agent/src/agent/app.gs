@@ -47,7 +47,7 @@ function defaultAppRoot() {
   return appRootForLaunch(process.execPath(), process.argv, process.cwd());
 }
 
-// 默认配置面向真实模型运行；agent.local.toml 可覆盖其中的密钥和模型参数。
+// 默认配置面向真实模型运行；项目只读取 agent.toml。
 function defaultAgentConfig() {
   return {
     provider: "anthropic",
@@ -63,13 +63,7 @@ function defaultAgentConfig() {
   };
 }
 
-// 配置读取顺序：本地私密配置优先，其次是可提交的默认配置。
 function readConfig(root) {
-  let localFile = path.join(root, "agent.local.toml");
-  if (fs.existsSync(localFile)) {
-    return toml.readFileSync(localFile);
-  }
-
   let configFile = path.join(root, "agent.toml");
   if (fs.existsSync(configFile)) {
     return toml.readFileSync(configFile);
@@ -174,7 +168,7 @@ function requireIMPlugin(app) {
   } catch (err) {
     let cfg = imPluginConfig(app);
     let command = cfg.command || ".agent/plugins/im-bot/gtp-imbot.exe";
-    throw new ReferenceError("IM bot plugin is not registered. Configure [im.plugin] in agent.local.toml and ensure the runtime starts " + command + " as @plugin/im-bot. Original error: " + String(err));
+    throw new ReferenceError("IM bot plugin is not registered. Configure [im.plugin] in agent.toml and ensure the runtime starts " + command + " as @plugin/im-bot. Original error: " + String(err));
   }
 }
 

@@ -252,7 +252,7 @@ scheduler runtime 负责：
 }
 ```
 
-`payload` 保留用于兼容旧代码。新代码应优先读取 `source`、`input` 和 `run`。
+`payload` 只用于额外扩展数据，不再作为旧 `payload.im` 或 `payload.text` 的兼容入口。Agent bridge 的必需字段是 `source`、`input` 和 `run`。
 
 ## 状态机
 
@@ -308,7 +308,7 @@ pending -> skipped
 | `POST` | `/api/schedules/tick` | 管理或测试用 tick |
 | `GET` | `/api/scheduler/status` | scheduler 运行时健康状态 |
 
-现有 `/api/schedules/run-due` 可以保留，作为 `/api/schedules/tick` 的兼容别名。
+旧 `/api/schedules/run-due` 不再保留。外部调用方必须迁移到 `/api/schedules/tick`。
 
 ## 存储调整
 
@@ -337,13 +337,13 @@ gateway_schedule_runs
 ### 阶段 1：任务契约清理
 
 - 新建 gateway task 时补齐 `source`、`input` 和 `run`。
-- 保留 `payload.im` 和 `payload.text` 兼容。
+- 删除旧 `payload.im` 和 `payload.text` 主路径。
 - 更新 smoke test，断言 IM task 的归一化结构。
 
 ### 阶段 2：持久化 Scheduler Runtime
 
 - 补充 `nextRunAt`、`lastStatus`、`lastTaskId` 和 `lastMessage` 语义。
-- 用 `tick()` 加兼容包装替换单次 `dueToTasks()`。
+- 用 `tick()` 替换旧的 `dueToTasks()`。
 - 增加手动运行接口 `/api/schedules/:id/run`。
 
 ### 阶段 3：IM Channel Runtime
@@ -371,4 +371,3 @@ gateway_schedule_runs
 - 不把 `plugins/scheduler` 变成网关持久 scheduler。
 - 不要求所有 IM 平台在数据模型建立前都完整支持入站和出站。
 - 在简单 schedule 类型证明不足前，不引入完整 cron parser。
-

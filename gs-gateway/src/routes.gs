@@ -20,12 +20,20 @@ export function registerRoutes(app, model) {
   let bridge = createAgentBridgeController(model.agentBridge);
 
   app.get("/health", health.health);
+  app.get("/chat", function(req, res) {
+    return res.redirect("/chat.html");
+  });
 
   app.get("/api/agent", agent.summary);
   app.get("/api/agent/sessions", agent.sessions);
   app.get("/api/agent/current-session", agent.currentSession);
 
   app.post("/api/im/inbound", im.inbound);
+  app.get("/api/im/channels", im.listChannels);
+  app.post("/api/im/channels", im.createChannel);
+  app.patch("/api/im/channels/:id", im.updateChannel);
+  app.delete("/api/im/channels/:id", im.removeChannel);
+  app.get("/api/im/conversations", im.listConversations);
   app.get("/api/events", im.events);
 
   app.get("/api/skills", skills.list);
@@ -46,8 +54,10 @@ export function registerRoutes(app, model) {
 
   app.get("/api/schedules", scheduler.list);
   app.post("/api/schedules", scheduler.create);
-  app.post("/api/schedules/run-due", scheduler.runDue);
+  app.post("/api/schedules/tick", scheduler.tick);
+  app.get("/api/scheduler/status", scheduler.status);
   app.get("/api/schedules/:id", scheduler.get);
   app.patch("/api/schedules/:id", scheduler.update);
   app.delete("/api/schedules/:id", scheduler.remove);
+  app.post("/api/schedules/:id/run", scheduler.run);
 }

@@ -1,4 +1,7 @@
-gs.exe
+*.exe
+*.log
+*.txt
+
 build/
 dist/
 **/dist/

@@ -44,7 +44,7 @@ IM 和定时任务的细化设计见 `docs/im-scheduler-gateway-design.md`。
 
 ## Agent 负责
 
-- 加载 `agent.toml` / `agent.local.toml`。
+- 加载 `agent.toml`。
 - provider 选择和模型请求。
 - Agent loop 行为：
   - 消息历史
@@ -110,7 +110,7 @@ Payload 结构：
 }
 ```
 
-`payload` 保留用于向后兼容。新网关代码应优先填充 `source`、`input` 和 `run`。
+`payload` 只用于额外扩展数据，不再作为旧 `payload.im` 或 `payload.text` 的兼容入口。新网关代码必须填充 `source`、`input` 和 `run`。
 
 期望结果结构：
 
@@ -144,5 +144,5 @@ Payload 结构：
 网关 smoke test 可以验证派发错误处理，即使本地没有模型 key。
 测试不能创建 fake Agent answer。
 
-真实端到端 bridge 测试需要 `gs-agent/agent.local.toml` 中存在可用 provider 配置。
-当该文件不存在时，预期 bridge 行为是持久化失败，并给出清晰的 provider 配置错误。
+真实端到端 bridge 测试需要 `gs-agent/agent.toml` 中存在可用 provider 配置。
+当该配置缺失时，预期 bridge 行为是持久化失败，并给出清晰的 provider 配置错误。

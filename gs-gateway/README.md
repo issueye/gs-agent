@@ -39,6 +39,12 @@ E:\codes\gts\dist\gs.exe --timeout 0 run
 http://127.0.0.1:8787
 ```
 
+测试聊天页：
+
+```text
+http://127.0.0.1:8787/chat
+```
+
 ## 配置
 
 `gateway.toml`：
@@ -62,6 +68,11 @@ agentRoot = "../gs-agent"
 | GET | `/api/agent/sessions` | agent session 列表 |
 | GET | `/api/agent/current-session` | 当前 agent session |
 | POST | `/api/im/inbound` | 写入 IM 入站消息，并创建 agent 任务 |
+| GET | `/api/im/channels` | IM 通道列表 |
+| POST | `/api/im/channels` | 创建 IM 通道 |
+| PATCH | `/api/im/channels/:id` | 更新 IM 通道 |
+| DELETE | `/api/im/channels/:id` | 删除 IM 通道 |
+| GET | `/api/im/conversations` | IM 会话列表 |
 | GET | `/api/events` | 网关事件列表 |
 | GET | `/api/skills` | skill 列表 |
 | POST | `/api/skills` | 创建 skill |
@@ -78,10 +89,12 @@ agentRoot = "../gs-agent"
 | POST | `/api/tasks/:id/run` | 运行任务；直接派发到真实 `gs-agent` |
 | GET | `/api/schedules` | 定时计划列表 |
 | POST | `/api/schedules` | 创建定时计划 |
+| POST | `/api/schedules/tick` | 执行一次 scheduler tick |
+| GET | `/api/scheduler/status` | scheduler 运行状态 |
 | GET | `/api/schedules/:id` | 读取定时计划 |
 | PATCH | `/api/schedules/:id` | 更新定时计划 |
 | DELETE | `/api/schedules/:id` | 删除定时计划 |
-| POST | `/api/schedules/run-due` | 将到期计划转成 pending 任务 |
+| POST | `/api/schedules/:id/run` | 手动运行定时计划 |
 
 ## IM 入站示例
 
@@ -94,7 +107,7 @@ Invoke-RestMethod `
 ```
 
 返回中会包含事件记录和新建任务。任务可通过 `/api/tasks/:id/run` 派发给 `gs-agent/gateway-task.gs`。
-网关不再提供 `fake`、`dryRun` 或 `allowReal` 分支；运行任务会直接进入真实 agent 链路，并要求 `gs-agent/agent.local.toml` 中存在可用模型配置。
+网关不再提供 `fake`、`dryRun` 或 `allowReal` 分支；运行任务会直接进入真实 agent 链路，并要求 `gs-agent/agent.toml` 中存在可用模型配置。
 
 每次运行都会写入 `agent_bridge` 事件，便于桌面端审计。
 网关与 agent 的功能边界见 `docs/gateway-agent-boundary.md`。
@@ -121,4 +134,4 @@ E:\codes\gts\dist\gs.exe --timeout 20s smoke-test.gs
 ```
 
 当前 smoke test 会验证网关记录、技能管理、调度和真实 agent 桥接错误处理。
-如果本机没有 `gs-agent/agent.local.toml`，桥接部分预期会失败并被记录为 `agent_bridge failed` 事件。
+如果 `gs-agent/agent.toml` 缺少可用 provider 配置，桥接部分预期会失败并被记录为 `agent_bridge failed` 事件。

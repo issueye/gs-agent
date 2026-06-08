@@ -10,13 +10,17 @@ function errorResult(error) {
 }
 
 function agentTaskPayload(gatewayModel, task) {
+  let body = task.payload || {};
   return {
     taskId: task.id,
     id: task.id,
     kind: task.kind,
     name: task.name,
     root: gatewayModel.config.gateway.agentRoot,
-    payload: task.payload || {},
+    source: body.source || {},
+    input: body.input || {},
+    run: body.run || {},
+    payload: body.payload || {},
   };
 }
 
@@ -42,6 +46,7 @@ export function createAgentBridgeModel(gatewayModel) {
 
     addEvent("start", task, {
       agentRoot: gatewayModel.config.gateway.agentRoot,
+      source: (task.payload && task.payload.source) ? task.payload.source.type : "",
     }, "running");
     gatewayModel.store.updateTask(id, { status: "running" });
 

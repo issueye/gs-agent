@@ -73,16 +73,11 @@ $RootFiles = @(
   "main.gs",
   "project.toml",
   "agent.toml",
-  "agent.local.example.toml",
   "README.md"
 )
 
 foreach ($File in $RootFiles) {
   Copy-Item -LiteralPath (Join-Path $ProjectRoot $File) -Destination $PublishDir
-}
-
-if (Test-Path -LiteralPath (Join-Path $PublishDir "agent.local.toml")) {
-  throw "Refusing to package agent.local.toml"
 }
 
 if (Test-Path -LiteralPath (Join-Path $PublishDir ".agent")) {
@@ -98,7 +93,7 @@ if (!(Test-Path -LiteralPath $Output)) {
 }
 
 $OutputDir = Split-Path -Parent $Output
-foreach ($ConfigFile in @("agent.toml", "agent.local.example.toml")) {
+foreach ($ConfigFile in @("agent.toml")) {
   $ConfigSource = Join-Path $ProjectRoot $ConfigFile
   $ConfigTarget = Join-Path $OutputDir $ConfigFile
   if ([System.IO.Path]::GetFullPath($ConfigSource) -ne [System.IO.Path]::GetFullPath($ConfigTarget)) {

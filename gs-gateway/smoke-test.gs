@@ -41,12 +41,19 @@ function main() {
     text: "hello gateway",
   });
   assertOK(received.event.id, "event id should be created");
+  assertOK(received.conversation.id, "conversation id should be created");
   assertOK(received.task.id, "task id should be created");
-  assertOK(received.task.payload.im.source === "im", "IM task should keep normalized source");
-  assertOK(received.task.payload.im.platform === "onebot", "IM task should keep platform");
-  assertOK(received.task.payload.im.adapter === "qq-local", "IM task should keep adapter");
-  assertOK(received.task.payload.im.chat === "smoke-chat", "IM task should keep chat");
-  assertOK(received.task.payload.im.text === "hello gateway", "IM task should keep text");
+  assertOK(received.task.payload.source.type === "im", "IM task should keep normalized source");
+  assertOK(received.task.payload.source.eventId === received.event.id, "IM task should keep event id");
+  assertOK(received.task.payload.input.text === "hello gateway", "IM task should keep input text");
+  assertOK(received.task.payload.input.im.platform === "onebot", "IM task should keep platform");
+  assertOK(received.task.payload.input.im.adapter === "qq-local", "IM task should keep adapter");
+  assertOK(received.task.payload.input.im.chat === "smoke-chat", "IM task should keep chat");
+  assertOK(received.task.payload.input.im.sender === "smoke-user", "IM task should keep sender");
+  let conversations = model.im.listConversations({
+    channelId: received.channel.id,
+  });
+  assertOK(conversations.length >= 1, "IM conversation should be listed");
 
   let task = store.updateTask(received.task.id, {
     status: "done",
@@ -98,25 +105,55 @@ function main() {
 
   let schedule = model.scheduler.create({
     name: "smoke schedule",
-    kind: "agent.smoke",
+    kind: "agent.schedule",
     schedule: {
-      dueAt: "2000-01-01T00:00:00.000Z",
+      type: "at",
+      at: "2000-01-01T00:00:00.000Z",
     },
-    payload: {
-      text: "scheduled smoke",
+    run: {
+      prompt: "scheduled smoke",
     },
   });
   assertOK(schedule.id, "schedule should be created");
-  let due = model.scheduler.dueToTasks({
+  assertOK(schedule.schedule.type === "at", "schedule should use at type");
+  assertOK(schedule.run.prompt === "scheduled smoke", "schedule should keep run prompt");
+  let tick = model.scheduler.tick({
     now: (new Date()).toISOString(),
   });
-  assertOK(due.tasks.length >= 1, "due schedule should create a task");
+  assertOK(tick.tasks.length >= 1, "scheduler tick should create a task");
+  assertOK(tick.tasks[0].payload.source.type === "schedule", "schedule task should keep source");
+  assertOK(tick.tasks[0].payload.input.text === "scheduled smoke", "schedule task should keep input text");
+
+  let manualSchedule = model.scheduler.create({
+    name: "manual smoke schedule",
+    kind: "agent.schedule",
+    schedule: {
+      type: "manual",
+    },
+    run: {
+      prompt: "manual scheduled smoke",
+    },
+  });
+  let manualRun = model.scheduler.run(manualSchedule.id, {
+    now: (new Date()).toISOString(),
+  });
+  assertOK(manualRun.task.id, "manual schedule run should create a task");
+  let schedulerStatus = model.scheduler.status();
+  assertOK(schedulerStatus.total >= 1, "scheduler status should include schedules");
 
   let agentTask = store.createTask({
     name: "bridge real agent",
     kind: "agent.real",
     payload: {
-      text: "real agent run",
+      source: {
+        type: "smoke",
+      },
+      input: {
+        text: "real agent run",
+      },
+      run: {
+        mode: "agent",
+      },
     },
   });
   let agentBridgeFailed = false;
@@ -161,7 +198,7 @@ function main() {
   println("agentRoot=" + config.gateway.agentRoot);
   println("skills=" + String(skills.length) + " tools=" + String(tools.length) + " plugins=" + String(plugins.length));
   println("task=" + task.id + " status=" + task.status);
-  println("schedule=" + schedule.id + " dueTasks=" + String(due.tasks.length));
+  println("schedule=" + schedule.id + " tickTasks=" + String(tick.tasks.length));
   println("agentBridge=" + agentResult.id + " status=" + agentResult.status);
 }
 
