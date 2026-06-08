@@ -36,13 +36,13 @@ E:\codes\gts\dist\gs.exe --timeout 0 run
 默认监听：
 
 ```text
-http://127.0.0.1:8787
+http://127.0.0.1:18878
 ```
 
 测试聊天页：
 
 ```text
-http://127.0.0.1:8787/chat
+http://127.0.0.1:18878/chat
 ```
 
 ## 配置
@@ -51,7 +51,7 @@ http://127.0.0.1:8787/chat
 
 ```toml
 [gateway]
-port = 8787
+port = 18878
 dataDir = ".gateway"
 database = ".gateway/gateway.db"
 agentRoot = "../gs-agent"
@@ -101,7 +101,7 @@ agentRoot = "../gs-agent"
 ```powershell
 Invoke-RestMethod `
   -Method Post `
-  -Uri http://127.0.0.1:8787/api/im/inbound `
+  -Uri http://127.0.0.1:18878/api/im/inbound `
   -ContentType application/json `
   -Body '{"platform":"onebot","adapter":"qq-local","sender":"10001","chat":"dev","text":"帮我查看当前任务"}'
 ```

@@ -3,7 +3,7 @@ import {
   normalizeSkillDescription,
   parseSkillDocument,
   skillDocument,
-} from "../../../gs-agent/src/agent/skills/spec";
+} from "@/models/skill_spec";
 
 let fs = require("@std/fs");
 let path = require("@std/path");

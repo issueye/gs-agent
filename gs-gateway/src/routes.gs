@@ -51,6 +51,8 @@ export function registerRoutes(app, model) {
   app.get("/api/tasks/:id", tasks.get);
   app.patch("/api/tasks/:id", tasks.update);
   app.post("/api/tasks/:id/run", bridge.run);
+  app.get("/ws/chat", model.wsHub.handleClient);
+  app.get("/ws/agent-events", model.wsHub.handleAgent);
 
   app.get("/api/schedules", scheduler.list);
   app.post("/api/schedules", scheduler.create);

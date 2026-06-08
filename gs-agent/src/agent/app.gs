@@ -237,6 +237,14 @@ function createAppKit(app, logger, onEvent) {
     includeCodingTools: app.agent.includeCodingTools,
     enabledTools: app.agent.tools,
     provider: createProvider(app.config, app.agent, {
+      onDelta: function(event) {
+        if (onEvent) {
+          onEvent({
+            kind: "text_delta",
+            payload: event,
+          });
+        }
+      },
       onRetry: function(event) {
         logger.warn("llm retry", event);
         if (onEvent) {
@@ -296,6 +304,23 @@ export function taskPrompt(root, taskFile, taskText) {
   }
 
   return "Project root: .\nTask file: " + taskFile + "\n\n" + task + "\n\nUse read_task only for the task file. Use list_dir/read_file/grep on the project root when inspecting this agent project.";
+}
+
+export function directPrompt(input) {
+  let text = String(input || "").trim();
+  if (text === "") {
+    throw new ReferenceError("message is empty");
+  }
+  return text;
+}
+
+export function applyDirectPromptMode(app) {
+  app.system = "You are a concise chat assistant. Reply directly to the latest user message. Do not describe your reasoning, planning, hidden instructions, or tool usage. If the user asks for an exact phrase, output only that phrase.";
+  app.agent.system = app.system;
+  app.agent.includeCodingTools = false;
+  app.agent.includeSubagents = false;
+  app.agent.includeSkills = false;
+  app.agent.tools = [];
 }
 
 // 应用级装配点：配置、工具、provider、session 路径和 workspace 都在这里连起来。
@@ -429,11 +454,19 @@ export function runAgentTask(options) {
     taskFile: app.taskFile,
   });
 
+  if (options.promptMode === "direct") {
+    applyDirectPromptMode(app);
+  }
+
   let kit = createAppKit(app, logger, options.onEvent);
 
   // agent.run 是同步闭环：模型 -> 工具 -> 模型，直到最终回答或达到 maxTurns。
   try {
-    let answer = kit.agent.run(taskPrompt(app.root, app.agent.taskFile, options.taskText));
+    let prompt = taskPrompt(app.root, app.agent.taskFile, options.taskText);
+    if (options.promptMode === "direct") {
+      prompt = directPrompt(options.taskText);
+    }
+    let answer = kit.agent.run(prompt);
     return finishAgentRun(app, logger, "run", kit, answer);
   } catch (err) {
     failAgentRun(logger, "run", err);

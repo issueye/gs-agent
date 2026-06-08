@@ -1,4 +1,4 @@
-import { parseSkillDocument } from "../../../gs-agent/src/agent/skills/spec";
+import { parseSkillDocument } from "@/models/skill_spec";
 
 let fs = require("@std/fs");
 let path = require("@std/path");

@@ -7,7 +7,7 @@ export function createProvider(config, agent, options) {
     options = {};
   }
   if (agent.provider === "anthropic") {
-    let anthropic = anthropicOptions(config, agent);
+    let anthropic = anthropicOptions(config, agent, options);
     anthropic.onRetry = options.onRetry;
     return createAnthropicProvider(anthropic);
   }
@@ -20,7 +20,10 @@ export function createProvider(config, agent, options) {
 }
 
 // Anthropic 兼容 provider 必须有 [llm.anthropic] 段，DeepSeek 也走这条路径。
-export function anthropicOptions(config, agent) {
+export function anthropicOptions(config, agent, options) {
+  if (!options) {
+    options = {};
+  }
   if (!config.llm || !config.llm.anthropic) {
     throw new ReferenceError("agent provider is anthropic, but [llm.anthropic] is missing");
   }
@@ -36,7 +39,9 @@ export function anthropicOptions(config, agent) {
     retryDelayMs: anthropic.retryDelayMs,
     temperature: anthropic.temperature,
     thinking: anthropic.thinking,
+    stream: anthropic.stream,
     system: agent.system,
+    onDelta: options.onDelta,
     requestBodyLogFile: agent.requestBodyLogFile,
   };
 }

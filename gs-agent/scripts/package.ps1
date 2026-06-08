@@ -20,6 +20,7 @@ Set-Location $ProjectRoot
 $GsExe = Resolve-ProjectPath $GsExe
 $Output = Resolve-ProjectPath $Output
 $PublishDir = Join-Path $ProjectRoot "build\gs-agent-app"
+$OutputDir = Split-Path -Parent $Output
 
 if (!(Test-Path -LiteralPath $GsExe)) {
   throw "GoScript executable not found: $GsExe"
@@ -63,6 +64,11 @@ if (Test-Path -LiteralPath $PublishDir) {
   Remove-Item -LiteralPath $PublishDir -Recurse -Force
 }
 
+$ProjectDistDir = Join-Path $ProjectRoot "dist"
+if ([System.IO.Path]::GetFullPath($OutputDir) -eq [System.IO.Path]::GetFullPath($ProjectDistDir)) {
+  Remove-Item -LiteralPath $OutputDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 New-Item -ItemType Directory -Force -Path $PublishDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $PublishDir "src") | Out-Null
 
@@ -71,6 +77,7 @@ Copy-Item -Path (Join-Path $ProjectRoot "src\tui") -Destination (Join-Path $Publ
 
 $RootFiles = @(
   "main.gs",
+  "gateway-task.gs",
   "project.toml",
   "agent.toml",
   "README.md"
@@ -92,7 +99,22 @@ if (!(Test-Path -LiteralPath $Output)) {
   throw "Package output was not created: $Output"
 }
 
-$OutputDir = Split-Path -Parent $Output
+$OutputAgentStateDir = Join-Path $OutputDir ".agent"
+if (Test-Path -LiteralPath $OutputAgentStateDir) {
+  Remove-Item -LiteralPath $OutputAgentStateDir -Recurse -Force
+}
+
+New-Item -ItemType Directory -Force -Path (Join-Path $OutputDir "src") | Out-Null
+$OutputAgentSrc = Join-Path $OutputDir "src\agent"
+if (Test-Path -LiteralPath $OutputAgentSrc) {
+  Remove-Item -LiteralPath $OutputAgentSrc -Recurse -Force
+}
+Copy-Item -Path (Join-Path $ProjectRoot "src\agent") -Destination (Join-Path $OutputDir "src") -Recurse
+
+foreach ($RuntimeFile in @("gateway-task.gs", "project.toml")) {
+  Copy-Item -LiteralPath (Join-Path $ProjectRoot $RuntimeFile) -Destination $OutputDir -Force
+}
+
 foreach ($ConfigFile in @("agent.toml")) {
   $ConfigSource = Join-Path $ProjectRoot $ConfigFile
   $ConfigTarget = Join-Path $OutputDir $ConfigFile

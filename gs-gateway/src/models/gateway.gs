@@ -3,6 +3,7 @@ import { createSkillsModel } from "@/models/skills";
 import { createSchedulerModel } from "@/models/scheduler";
 import { createAgentBridgeModel } from "@/models/agent_bridge";
 import { createIMRuntime } from "@/models/im_runtime";
+import { createWSHub } from "@/models/ws_hub";
 
 export function createGatewayModel(config, store) {
   let agent = createAgentModel(config.gateway.agentRoot);
@@ -25,5 +26,6 @@ export function createGatewayModel(config, store) {
   gateway.skills = createSkillsModel(gateway);
   gateway.scheduler = createSchedulerModel(store);
   gateway.agentBridge = createAgentBridgeModel(gateway);
+  gateway.wsHub = createWSHub(gateway);
   return gateway;
 }

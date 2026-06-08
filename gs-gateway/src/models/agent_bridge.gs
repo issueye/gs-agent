@@ -1,6 +1,11 @@
 let path = require("@std/path");
 let runtime = require("@std/runtime");
 
+function wsBaseUrl(config) {
+  let port = String(config.gateway.port);
+  return "ws://127.0.0.1:" + port;
+}
+
 function errorResult(error) {
   return {
     error: {
@@ -20,6 +25,10 @@ function agentTaskPayload(gatewayModel, task) {
     source: body.source || {},
     input: body.input || {},
     run: body.run || {},
+    stream: {
+      url: wsBaseUrl(gatewayModel.config) + "/ws/agent-events",
+      taskId: task.id,
+    },
     payload: body.payload || {},
   };
 }

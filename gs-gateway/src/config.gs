@@ -19,7 +19,7 @@ function mergeObject(base, extra) {
 export function defaultConfig() {
   return {
     gateway: {
-      port: 8787,
+      port: 18878,
       dataDir: ".gateway",
       database: ".gateway/gateway.db",
       agentRoot: "../gs-agent",
