@@ -1,0 +1,33 @@
+{
+  "name": "icoo-claw-desktop-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build:dev": "vite build --minify false --mode development",
+    "build": "vite build --mode production",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:stack": "powershell -ExecutionPolicy Bypass -File ../../scripts/dev/run-ui-smoke.ps1"
+  },
+  "dependencies": {
+    "@wailsio/runtime": "latest",
+    "jszip": "^3.10.1",
+    "lucide-vue-next": "^0.542.0",
+    "markdown-it": "^14.1.1",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.22",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "@vitejs/plugin-vue": "^5.1.5",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "vite": "^5.4.19",
+    "vitest": "^1.6.1"
+  }
+}
