@@ -54,7 +54,7 @@ To run E2E against an already-started preview:
 
 ```powershell
 Push-Location .\desktop\frontend
-$env:GATEWAY_BASE_URL = "http://127.0.0.1:8080"
+$env:GATEWAY_BASE_URL = "http://127.0.0.1:18878"
 $env:E2E_DEFAULT_AGENT_ID = "agent_desktop_default"
 $env:PLAYWRIGHT_BASE_URL = "http://127.0.0.1:4173"
 npm run test:e2e

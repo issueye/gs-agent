@@ -7,6 +7,7 @@ import { createPluginController } from "@/controllers/plugin_controller";
 import { createTaskController } from "@/controllers/task_controller";
 import { createSchedulerController } from "@/controllers/scheduler_controller";
 import { createAgentBridgeController } from "@/controllers/agent_bridge_controller";
+import { createManagementController } from "@/controllers/management_controller";
 
 export function registerRoutes(app, model) {
   let health = createHealthController(model);
@@ -18,6 +19,7 @@ export function registerRoutes(app, model) {
   let tasks = createTaskController(model);
   let scheduler = createSchedulerController(model.scheduler);
   let bridge = createAgentBridgeController(model.agentBridge);
+  let management = createManagementController(model);
 
   app.get("/health", health.health);
   app.get("/chat", function(req, res) {
@@ -28,12 +30,31 @@ export function registerRoutes(app, model) {
   app.get("/api/agent/sessions", agent.sessions);
   app.get("/api/agent/current-session", agent.currentSession);
 
+  app.get("/api/providers", management.listProviders);
+  app.post("/api/providers", management.createProvider);
+  app.patch("/api/providers/:id", management.updateProvider);
+  app.delete("/api/providers/:id", management.removeProvider);
+
+  app.get("/api/agents", management.listAgents);
+  app.post("/api/agents", management.createAgent);
+  app.patch("/api/agents/:id", management.updateAgent);
+  app.delete("/api/agents/:id", management.removeAgent);
+
+  app.get("/api/agent-instances", management.listAgentInstances);
+  app.post("/api/agent-instances", management.startAgentInstance);
+  app.patch("/api/agent-instances/:id/stop", management.stopAgentInstance);
+  app.patch("/api/agent-instances/:id/restart", management.restartAgentInstance);
+  app.patch("/api/agent-instances/:id/drain", management.drainAgentInstance);
+  app.delete("/api/agent-instances/:id", management.removeAgentInstance);
+
   app.post("/api/im/inbound", im.inbound);
   app.get("/api/im/channels", im.listChannels);
   app.post("/api/im/channels", im.createChannel);
   app.patch("/api/im/channels/:id", im.updateChannel);
   app.delete("/api/im/channels/:id", im.removeChannel);
   app.get("/api/im/conversations", im.listConversations);
+  app.get("/api/im/conversations/:id/messages", im.listConversationMessages);
+  app.delete("/api/im/conversations/:id", im.removeConversation);
   app.get("/api/events", im.events);
 
   app.get("/api/skills", skills.list);

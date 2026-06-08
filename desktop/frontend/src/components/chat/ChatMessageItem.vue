@@ -16,12 +16,14 @@ const props = defineProps({
 
 const renderedContent = computed(() => renderMarkdown(props.message.content))
 const toolMetadata = computed(() => props.message.metadata || {})
+const isToolMessage = computed(() => props.message.role === 'tool' || Boolean(toolMetadata.value.toolCallId))
+const toolSummary = computed(() => compactToolSummary(toolMetadata.value))
 const toolLabel = computed(() => {
   const meta = toolMetadata.value
   if (!meta.toolCallId && !meta.toolStatus && !meta.toolKind) {
     return ''
   }
-  return [meta.toolKind, meta.toolStatus].filter(Boolean).join(' · ')
+  return [toolKindLabel(meta.toolKind), toolStatusLabel(meta.toolStatus)].filter(Boolean).join(' · ')
 })
 
 const usageLabel = computed(() => {
@@ -36,13 +38,12 @@ const usageLabel = computed(() => {
   return parts.join(' · ')
 })
 
-const isToolMessage = computed(() => props.message.role === 'tool' || Boolean(toolMetadata.value.toolCallId))
 const messageShellClass = computed(() => {
   if (props.message.role === 'user') return 'message-shell--user'
   if (isToolMessage.value) return 'message-shell--tool'
   return 'message-shell--assistant'
 })
-const statusLabel = computed(() => props.message.draft ? 'streaming' : '')
+const statusLabel = computed(() => props.message.draft ? '生成中' : '')
 const toolStatus = computed(() => toolMetadata.value.toolStatus || '')
 const toolIcon = computed(() => {
   if (toolStatus.value === 'completed') return CheckCircle2
@@ -55,22 +56,22 @@ const toolIconClass = computed(() => {
   return 'animate-spin text-[var(--qq-accent)]'
 })
 const isFinalToolStatus = computed(() => ['completed', 'failed', 'cancelled'].includes(toolStatus.value))
-const toolExpanded = ref(!isFinalToolStatus.value)
+const toolExpanded = ref(false)
 const shouldShowMessageBody = computed(() => !isToolMessage.value || toolExpanded.value)
 const toolToggleLabel = computed(() => toolExpanded.value ? '收起' : '展开')
 
 watch(
   () => `${props.message.id}:${toolStatus.value}:${isToolMessage.value}`,
   () => {
-    toolExpanded.value = !(isToolMessage.value && isFinalToolStatus.value)
+    toolExpanded.value = false
   },
 )
 
 function roleLabel(role) {
   if (isToolMessage.value) {
-    return 'Tool'
+    return '工具'
   }
-  return role === 'user' ? 'You' : 'Assistant'
+  return role === 'user' ? '你' : '助手'
 }
 
 function formatTimestamp(value) {
@@ -78,6 +79,47 @@ function formatTimestamp(value) {
     return ''
   }
   return new Date(value).toLocaleTimeString()
+}
+
+function toolKindLabel(kind) {
+  const value = String(kind || '').trim()
+  if (value === 'search') return '搜索'
+  if (value === 'read') return '读取'
+  if (value === 'edit') return '修改'
+  if (value === 'execute') return '执行'
+  if (value === 'fetch') return '获取'
+  if (value === 'agent.im') return '网关'
+  if (value === 'tool_call') return '工具'
+  return value || '工具'
+}
+
+function toolStatusLabel(status) {
+  const value = String(status || '').trim()
+  if (value === 'running' || value === 'pending' || value === 'in_progress') return '运行中'
+  if (value === 'completed') return '已完成'
+  if (value === 'failed') return '失败'
+  if (value === 'cancelled') return '已取消'
+  return value
+}
+
+function compactToolSummary(meta = {}) {
+  const input = meta.rawInput
+  if (!input) {
+    return ''
+  }
+  if (typeof input === 'string') {
+    return input.length > 80 ? `${input.slice(0, 80)}...` : input
+  }
+  if (input.query) {
+    return `查询：${input.query}`
+  }
+  if (input.path) {
+    return `路径：${input.path}`
+  }
+  if (input.command) {
+    return `命令：${input.command}`
+  }
+  return ''
 }
 </script>
 
@@ -99,7 +141,7 @@ function formatTimestamp(value) {
         >
           {{ roleLabel(message.role) }}
         </span>
-        <span v-if="message.draft" class="text-xs text-[color:var(--qq-text-tertiary)]">streaming</span>
+        <span v-if="message.draft" class="text-xs text-[color:var(--qq-text-tertiary)]">生成中</span>
         <span
           v-if="toolLabel && !isToolMessage"
           class="inline-flex items-center gap-1 rounded-lg bg-white/70 px-2 py-0.5 text-[11px] text-[color:var(--qq-text-secondary)]"
@@ -135,7 +177,8 @@ function formatTimestamp(value) {
           <span class="min-w-0 flex-1 truncate font-medium text-[color:var(--qq-text-primary)]">
             {{ toolMetadata.toolTitle || toolMetadata.toolKind || '工具调用' }}
           </span>
-          <span v-if="toolMetadata.toolStatus" class="shrink-0">· {{ toolMetadata.toolStatus }}</span>
+          <span v-if="toolSummary" class="hidden min-w-0 flex-1 truncate sm:inline">{{ toolSummary }}</span>
+          <span v-if="toolMetadata.toolStatus" class="shrink-0">· {{ toolStatusLabel(toolMetadata.toolStatus) }}</span>
           <span class="tool-message-toggle__label inline-flex shrink-0 items-center gap-1">
             <component :is="toolExpanded ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
             {{ toolToggleLabel }}
@@ -151,8 +194,8 @@ function formatTimestamp(value) {
           v-if="shouldShowMessageBody && (isToolMessage || usageLabel)"
           class="mt-2 border-t border-[color:var(--qq-border)] pt-2 text-xs text-[color:var(--qq-text-tertiary)]"
         >
-          <span v-if="isToolMessage" class="mr-3">tool {{ toolMetadata.toolKind || 'other' }} · {{ toolMetadata.toolStatus || 'pending' }}</span>
-          <span v-if="usageLabel">usage {{ usageLabel }}</span>
+          <span v-if="isToolMessage" class="mr-3">{{ toolKindLabel(toolMetadata.toolKind) }} · {{ toolStatusLabel(toolMetadata.toolStatus || 'pending') }}</span>
+          <span v-if="usageLabel">用量 {{ usageLabel }}</span>
         </div>
       </div>
     </div>

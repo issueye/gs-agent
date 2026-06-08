@@ -1,48 +1,73 @@
 import { fetchJSON } from './http'
 
 export async function listAgents(baseUrl) {
-  const payload = await fetchJSON(baseUrl, '/api/agent')
-  return [normalizeGatewayAgent(payload)]
+  const payload = await fetchJSON(baseUrl, '/api/agents')
+  return (Array.isArray(payload) ? payload : payload?.agents || []).map(normalizeAgent)
 }
 
 export async function createAgent(baseUrl, input) {
-  void baseUrl
-  void input
-  throw new Error('当前 gs-gateway 暂未提供 Agent 创建接口，请在 gs-agent 配置中管理 Agent。')
+  const payload = await fetchJSON(baseUrl, '/api/agents', {
+    method: 'POST',
+    body: agentPayload(input, { includeId: true }),
+  })
+  return normalizeAgent(payload)
 }
 
 export async function updateAgent(baseUrl, agentId, input) {
-  void baseUrl
-  void agentId
-  void input
-  throw new Error('当前 gs-gateway 暂未提供 Agent 更新接口，请在 gs-agent 配置中管理 Agent。')
+  const payload = await fetchJSON(baseUrl, `/api/agents/${encodeURIComponent(agentId)}`, {
+    method: 'PATCH',
+    body: agentPayload(input),
+  })
+  return normalizeAgent(payload)
 }
 
 export async function deleteAgent(baseUrl, agentId) {
-  void baseUrl
-  void agentId
-  throw new Error('当前 gs-gateway 暂未提供 Agent 删除接口，请在 gs-agent 配置中管理 Agent。')
+  await fetchJSON(baseUrl, `/api/agents/${encodeURIComponent(agentId)}`, {
+    method: 'DELETE',
+  })
 }
 
-function normalizeGatewayAgent(summary = {}) {
-  const root = summary.root || summary.agentRoot || ''
+function agentPayload(input, options = {}) {
+  const body = {
+    name: input.name || '',
+    providerId: input.providerId || '',
+    modelProvider: input.modelProvider || 'openai',
+    modelName: input.modelName || '',
+    baseUrl: input.baseUrl || '',
+    transport: input.transport || 'websocket',
+    commandArgs: input.commandArgs || [],
+    systemPrompt: input.systemPrompt || '',
+    maxIterations: Number(input.maxIterations) || 0,
+    toolWhitelist: input.toolWhitelist || [],
+    networkAllow: input.networkAllow || [],
+    mcpServerIds: input.mcpServerIds || [],
+    skillIds: input.skillIds || [],
+    enabled: input.enabled !== false,
+  }
+  if (options.includeId) {
+    body.id = input.id || ''
+  }
+  return body
+}
+
+function normalizeAgent(agent = {}) {
   return {
-    id: 'gs-agent',
-    name: 'gs-agent',
-    providerId: '',
-    modelProvider: 'gs-gateway',
-    modelName: summary.currentSession?.model || summary.model || '',
-    baseUrl: root,
-    transport: 'websocket',
-    commandArgs: [],
-    systemPrompt: '通过 gs-gateway 的 IM 入站任务链路运行',
-    maxIterations: 0,
-    toolWhitelist: [],
-    networkAllow: [],
-    mcpServerIds: [],
-    skillIds: [],
-    enabled: true,
-    createdAt: '',
-    updatedAt: summary.generatedAt || '',
+    id: agent.id,
+    name: agent.name || agent.id,
+    providerId: agent.providerId || agent.provider_id || '',
+    modelProvider: agent.modelProvider || agent.model_provider || 'openai',
+    modelName: agent.modelName || agent.model_name || '',
+    baseUrl: agent.baseUrl || '',
+    transport: agent.transport || 'websocket',
+    commandArgs: Array.isArray(agent.commandArgs) ? agent.commandArgs : [],
+    systemPrompt: agent.systemPrompt || '',
+    maxIterations: Number(agent.maxIterations || 0),
+    toolWhitelist: Array.isArray(agent.toolWhitelist) ? agent.toolWhitelist : [],
+    networkAllow: Array.isArray(agent.networkAllow) ? agent.networkAllow : [],
+    mcpServerIds: Array.isArray(agent.mcpServerIds) ? agent.mcpServerIds : [],
+    skillIds: Array.isArray(agent.skillIds) ? agent.skillIds : [],
+    enabled: agent.enabled !== false,
+    createdAt: agent.created_at || agent.createdAt || '',
+    updatedAt: agent.updated_at || agent.updatedAt || '',
   }
 }

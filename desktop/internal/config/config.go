@@ -2,6 +2,11 @@ package config
 
 import "strings"
 
+const (
+	DefaultGatewayBaseURL = "http://127.0.0.1:18878"
+	legacyGatewayBaseURL  = "http://127.0.0.1:8080"
+)
+
 type Settings struct {
 	Gateway          GatewaySettings   `json:"gateway" toml:"gateway"`
 	Workspace        WorkspaceSettings `json:"workspace" toml:"workspace"`
@@ -32,7 +37,7 @@ type UISettings struct {
 func DefaultSettings() Settings {
 	return Settings{
 		Gateway: GatewaySettings{
-			BaseURL:        "http://127.0.0.1:8080",
+			BaseURL:        DefaultGatewayBaseURL,
 			DefaultAgentID: "",
 		},
 		Workspace: WorkspaceSettings{},
@@ -100,5 +105,8 @@ func findProject(projects []ProjectSettings, projectID string) *ProjectSettings 
 func normalizeBaseURL(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.TrimRight(value, "/")
+	if value == legacyGatewayBaseURL {
+		return DefaultGatewayBaseURL
+	}
 	return value
 }

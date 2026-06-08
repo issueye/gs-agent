@@ -91,7 +91,7 @@ function isRunning(conversation, runningConversationIds) {
     <template v-else>
     <div class="flex items-center justify-between border-b border-[color:var(--qq-border)] px-4 py-3">
       <div>
-        <p class="text-xs uppercase text-[color:var(--qq-text-tertiary)]">Conversations</p>
+        <p class="text-xs uppercase text-[color:var(--qq-text-tertiary)]">会话</p>
         <h2 class="mt-1 text-sm font-semibold text-[color:var(--qq-text-primary)]">会话列表</h2>
       </div>
       <div class="flex items-center gap-2">
@@ -140,7 +140,7 @@ function isRunning(conversation, runningConversationIds) {
         <div class="flex items-start justify-between gap-3">
           <RouterLink :to="`/chat/${conversation.id}`" :data-testid="`conversation-open-${conversation.id}`" class="min-w-0 flex-1">
             <h3 class="line-clamp-2 text-sm font-medium text-[color:var(--qq-text-primary)]">
-              {{ conversation.title || 'Untitled Conversation' }}
+              {{ conversation.title || '未命名会话' }}
             </h3>
             <p class="mt-1.5 flex min-w-0 items-center gap-2 text-xs text-[color:var(--qq-text-tertiary)]">
               <span class="truncate">

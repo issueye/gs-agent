@@ -19,17 +19,17 @@ defineProps({
 })
 
 function gatewayLabel(status) {
-  if (status === 'connected') return 'Gateway Online'
-  if (status === 'unconfigured') return 'Gateway Unconfigured'
-  if (status === 'offline') return 'Gateway Offline'
-  return 'Gateway Pending'
+  if (status === 'connected') return '网关在线'
+  if (status === 'unconfigured') return '网关未配置'
+  if (status === 'offline') return '网关离线'
+  return '网关连接中'
 }
 
 function socketLabel(status) {
-  if (status === 'open') return 'Socket Ready'
-  if (status === 'connecting') return 'Socket Connecting'
-  if (status === 'closed') return 'Socket Closed'
-  return 'Socket Idle'
+  if (status === 'open') return '通道就绪'
+  if (status === 'connecting') return '通道连接中'
+  if (status === 'closed') return '通道已关闭'
+  return '通道空闲'
 }
 </script>
 
@@ -39,7 +39,7 @@ function socketLabel(status) {
     <span class="qq-badge rounded-lg px-2 py-0.5">{{ socketLabel(socketStatus) }}</span>
     <span class="qq-badge rounded-lg px-2 py-0.5">Agent {{ agentName }}</span>
     <span v-if="projectContext" class="qq-badge max-w-full rounded-lg px-2 py-0.5">
-      Project {{ projectContext.name }} · {{ projectContext.rootDir }}
+      项目 {{ projectContext.name }} · {{ projectContext.rootDir }}
     </span>
   </div>
 </template>

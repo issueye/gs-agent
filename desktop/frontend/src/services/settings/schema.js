@@ -15,6 +15,9 @@ export function defaultSettings() {
   }
 }
 
+const legacyGatewayBaseUrl = 'http://127.0.0.1:8080'
+const defaultGatewayBaseUrl = 'http://127.0.0.1:18878'
+
 export function mergeSettings(value = {}) {
   const fallback = defaultSettings()
   const gatewayValue = value.gateway || {}
@@ -57,7 +60,8 @@ export function normalizeProject(value = {}) {
 }
 
 function normalizeBaseUrl(value) {
-  return String(value || '').trim().replace(/\/+$/, '')
+  const normalized = String(value || '').trim().replace(/\/+$/, '')
+  return normalized === legacyGatewayBaseUrl ? defaultGatewayBaseUrl : normalized
 }
 
 function normalizeProjects(projects) {

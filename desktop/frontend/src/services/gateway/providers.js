@@ -1,40 +1,58 @@
 import { fetchJSON } from './http'
 
 export async function listProviders(baseUrl) {
-  const payload = await fetchJSON(baseUrl, '/api/agent')
-  return [normalizeGatewayProvider(payload)]
+  const payload = await fetchJSON(baseUrl, '/api/providers')
+  return (Array.isArray(payload) ? payload : payload?.providers || []).map(normalizeProvider)
 }
 
 export async function createProvider(baseUrl, input) {
-  void baseUrl
-  void input
-  throw new Error('当前 gs-gateway 暂未提供供应商创建接口，请在 gs-agent 配置中管理模型供应商。')
+  const payload = await fetchJSON(baseUrl, '/api/providers', {
+    method: 'POST',
+    body: providerPayload(input, { includeId: true }),
+  })
+  return normalizeProvider(payload)
 }
 
 export async function updateProvider(baseUrl, providerId, input) {
-  void baseUrl
-  void providerId
-  void input
-  throw new Error('当前 gs-gateway 暂未提供供应商更新接口，请在 gs-agent 配置中管理模型供应商。')
+  const payload = await fetchJSON(baseUrl, `/api/providers/${encodeURIComponent(providerId)}`, {
+    method: 'PATCH',
+    body: providerPayload(input),
+  })
+  return normalizeProvider(payload)
 }
 
 export async function deleteProvider(baseUrl, providerId) {
-  void baseUrl
-  void providerId
-  throw new Error('当前 gs-gateway 暂未提供供应商删除接口，请在 gs-agent 配置中管理模型供应商。')
+  await fetchJSON(baseUrl, `/api/providers/${encodeURIComponent(providerId)}`, {
+    method: 'DELETE',
+  })
 }
 
-function normalizeGatewayProvider(summary = {}) {
+function providerPayload(input, options = {}) {
+  const body = {
+    name: input.name || '',
+    type: input.type || 'openai',
+    baseUrl: input.baseUrl || '',
+    defaultModel: input.defaultModel || '',
+    apiKey: input.apiKey || '',
+    enabled: input.enabled !== false,
+  }
+  if (options.includeId) {
+    body.id = input.id || ''
+  }
+  return body
+}
+
+function normalizeProvider(provider = {}) {
   return {
-    id: 'gs-gateway',
-    name: 'gs-gateway',
-    type: 'gateway',
-    baseUrl: summary.root || '',
-    defaultModel: summary.currentSession?.model || summary.model || '',
-    enabled: true,
-    apiKeySet: false,
-    apiKeyPreview: '',
-    createdAt: '',
-    updatedAt: summary.generatedAt || '',
+    id: provider.id,
+    name: provider.name || provider.id,
+    type: provider.type || 'openai',
+    baseUrl: provider.baseUrl || '',
+    defaultModel: provider.defaultModel || '',
+    enabled: provider.enabled !== false,
+    apiKeySet: Boolean(provider.apiKeySet),
+    apiKeyPreview: provider.apiKeyPreview || '',
+    createdAt: provider.created_at || provider.createdAt || '',
+    updatedAt: provider.updated_at || provider.updatedAt || '',
   }
 }

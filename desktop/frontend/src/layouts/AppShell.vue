@@ -1,7 +1,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import { Bot, CalendarClock, KeyRound, LayoutTemplate, MessageSquareText, Minus, PlugZap, RefreshCw, Search, Settings2, Square, Wrench, X } from 'lucide-vue-next'
+import { Bot, CalendarClock, KeyRound, MessageSquareText, Minus, PlugZap, RefreshCw, Search, Settings2, Square, Wrench, X } from 'lucide-vue-next'
 import { Window } from '@wailsio/runtime'
 import AppSidebar from '@/components/chrome/AppSidebar.vue'
 import ConversationList from '@/components/conversation/ConversationList.vue'
@@ -39,20 +39,19 @@ const conversationDeleteDialog = reactive({
 })
 
 const navItems = [
-  { name: 'chat-home', label: 'Chat', icon: MessageSquareText, to: '/chat' },
-  { name: 'ued', label: 'UED', icon: LayoutTemplate, to: '/ued' },
-  { name: 'search', label: 'Search', icon: Search, to: '/search' },
-  { name: 'agents', label: 'Agents', icon: Bot, to: '/agents' },
-  { name: 'providers', label: 'Providers', icon: KeyRound, to: '/providers' },
-  { name: 'scheduled-tasks', label: 'Tasks', icon: CalendarClock, to: '/scheduled-tasks' },
-  { name: 'skills', label: 'Skills', icon: Wrench, to: '/skills' },
-  { name: 'plugins', label: 'Plugins', icon: PlugZap, to: '/plugins' },
-  { name: 'settings', label: 'Settings', icon: Settings2, to: '/settings' },
+  { name: 'chat-home', label: '会话', icon: MessageSquareText, to: '/chat' },
+  { name: 'search', label: '搜索', icon: Search, to: '/search' },
+  { name: 'agents', label: 'Agent', icon: Bot, to: '/agents' },
+  { name: 'providers', label: '供应商', icon: KeyRound, to: '/providers' },
+  { name: 'scheduled-tasks', label: '任务', icon: CalendarClock, to: '/scheduled-tasks' },
+  { name: 'skills', label: '技能', icon: Wrench, to: '/skills' },
+  { name: 'plugins', label: '插件', icon: PlugZap, to: '/plugins' },
+  { name: 'settings', label: '设置', icon: Settings2, to: '/settings' },
 ]
 
 const activeConversationId = computed(() => String(route.params.id || ''))
 const isChatRoute = computed(() => route.path === '/chat' || route.path.startsWith('/chat/'))
-const currentSectionLabel = computed(() => navItems.find((item) => route.path === item.to || route.path.startsWith(`${item.to}/`))?.label || 'Workspace')
+const currentSectionLabel = computed(() => navItems.find((item) => route.path === item.to || route.path.startsWith(`${item.to}/`))?.label || '工作台')
 const shellStatusLabel = computed(() => {
   if (chatStore.anyStreaming) {
     return chatStore.runningConversationIds.length > 1 ? `${chatStore.runningConversationIds.length} 个会话生成中` : '回答生成中'

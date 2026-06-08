@@ -14,7 +14,7 @@ func TestStoreLoadReturnsDefaultsWhenFileIsMissing(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if settings.Gateway.BaseURL != "http://127.0.0.1:8080" {
+	if settings.Gateway.BaseURL != "http://127.0.0.1:18878" {
 		t.Fatalf("BaseURL = %q", settings.Gateway.BaseURL)
 	}
 	if len(settings.Projects) != 0 {
@@ -25,6 +25,32 @@ func TestStoreLoadReturnsDefaultsWhenFileIsMissing(t *testing.T) {
 	}
 	if !settings.UI.ShowTimestamps {
 		t.Fatalf("ShowTimestamps = false, want true")
+	}
+}
+
+func TestStoreMigratesLegacyGatewayDefaultURL(t *testing.T) {
+	t.Parallel()
+
+	store := NewStore(filepath.Join(t.TempDir(), "settings.toml"))
+	_, err := store.Save(Settings{
+		Gateway: GatewaySettings{
+			BaseURL: " http://127.0.0.1:8080/ ",
+		},
+		UI: UISettings{
+			ShowTimestamps: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if loaded.Gateway.BaseURL != "http://127.0.0.1:18878" {
+		t.Fatalf("BaseURL = %q", loaded.Gateway.BaseURL)
 	}
 }
 

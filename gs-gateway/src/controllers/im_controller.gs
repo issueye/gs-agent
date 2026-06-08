@@ -45,6 +45,22 @@ export function createIMController(model) {
     return ok(res, model.im.listConversations(req.query || {}));
   }
 
+  function listConversationMessages(req, res) {
+    let messages = model.im.listConversationMessages(req.params.id);
+    if (!messages) {
+      return fail(res, 404, "NOT_FOUND", "IM conversation not found");
+    }
+    return ok(res, messages);
+  }
+
+  function removeConversation(req, res) {
+    let conversation = model.im.removeConversation(req.params.id);
+    if (!conversation) {
+      return fail(res, 404, "NOT_FOUND", "IM conversation not found");
+    }
+    return ok(res, conversation);
+  }
+
   return {
     inbound: inbound,
     events: events,
@@ -54,5 +70,7 @@ export function createIMController(model) {
     updateChannel: updateChannel,
     removeChannel: removeChannel,
     listConversations: listConversations,
+    listConversationMessages: listConversationMessages,
+    removeConversation: removeConversation,
   };
 }

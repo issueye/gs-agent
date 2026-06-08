@@ -14,6 +14,68 @@ function errorResult(error) {
   };
 }
 
+function resolveTaskAgentId(task) {
+  let body = task && task.payload ? task.payload : {};
+  let run = body.run || {};
+  let input = body.input || {};
+  return String(run.agentId || run.agent_id || input.agentId || input.agent_id || "");
+}
+
+function resolveProvider(store, agent) {
+  if (!agent) {
+    return undefined;
+  }
+  if (agent.providerId) {
+    return store.getProviderSecret(agent.providerId);
+  }
+  let providers = store.listProviders();
+  for (let provider of providers) {
+    if (provider.enabled && provider.type === agent.modelProvider) {
+      return store.getProviderSecret(provider.id);
+    }
+  }
+  return undefined;
+}
+
+function agentRunConfig(gatewayModel, task) {
+  let agentId = resolveTaskAgentId(task);
+  if (agentId === "") {
+    return {};
+  }
+  let agent = gatewayModel.store.getAgent(agentId);
+  if (!agent) {
+    throw new Error("agent not found: " + agentId);
+  }
+  if (!agent.enabled) {
+    throw new Error("agent is disabled: " + agentId);
+  }
+  let provider = resolveProvider(gatewayModel.store, agent);
+  if (!provider || !provider.enabled) {
+    throw new Error("agent provider not found or disabled: " + agentId);
+  }
+  if (!provider.apiKey) {
+    throw new Error("agent provider apiKey is missing: " + provider.id);
+  }
+
+  return {
+    agent: {
+      id: agent.id,
+      provider: agent.modelProvider || provider.type || "anthropic",
+      system: agent.systemPrompt || "",
+      maxTurns: agent.maxIterations || 0,
+      tools: agent.toolWhitelist || [],
+      skills: agent.skillIds || [],
+      includeSkills: (agent.skillIds || []).length > 0,
+    },
+    llm: {
+      provider: provider.type || agent.modelProvider || "",
+      apiKey: provider.apiKey,
+      baseUrl: agent.baseUrl || provider.baseUrl || "",
+      model: agent.modelName || provider.defaultModel || "",
+    },
+  };
+}
+
 function agentTaskPayload(gatewayModel, task) {
   let body = task.payload || {};
   return {
@@ -25,6 +87,7 @@ function agentTaskPayload(gatewayModel, task) {
     source: body.source || {},
     input: body.input || {},
     run: body.run || {},
+    config: agentRunConfig(gatewayModel, task),
     stream: {
       url: wsBaseUrl(gatewayModel.config) + "/ws/agent-events",
       taskId: task.id,

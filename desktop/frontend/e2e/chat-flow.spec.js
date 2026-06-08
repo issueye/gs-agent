@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const gatewayURL = process.env.GATEWAY_BASE_URL || 'http://127.0.0.1:8080'
+const gatewayURL = process.env.GATEWAY_BASE_URL || 'http://127.0.0.1:18878'
 const defaultAgentId = process.env.E2E_DEFAULT_AGENT_ID || 'agent_desktop_default'
 const browserSettingsKey = 'icoo-claw.desktop.settings'
 

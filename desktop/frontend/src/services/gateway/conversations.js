@@ -23,14 +23,14 @@ export async function createConversation(baseUrl, input) {
 }
 
 export async function listConversationMessages(baseUrl, conversationId) {
-  void baseUrl
-  void conversationId
-  return []
+  const payload = await fetchJSON(baseUrl, `/api/im/conversations/${encodeURIComponent(conversationId)}/messages`)
+  return (Array.isArray(payload) ? payload : payload?.messages || []).map(normalizeMessage)
 }
 
 export async function deleteConversation(baseUrl, conversationId) {
-  void baseUrl
-  void conversationId
+  await fetchJSON(baseUrl, `/api/im/conversations/${encodeURIComponent(conversationId)}`, {
+    method: 'DELETE',
+  })
 }
 
 export function normalizeConversation(conversation) {
@@ -69,6 +69,7 @@ export function normalizeMessage(message) {
     contentBlocks: message.content_blocks || message.contentBlocks || [],
     toolCalls: message.tool_calls || message.toolCalls || [],
     metadata: message.metadata || {},
+    error: Boolean(message.error),
     createdAt: message.created_at,
   }
 }

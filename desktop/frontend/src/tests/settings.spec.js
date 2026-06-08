@@ -40,6 +40,14 @@ describe('settings schema helpers', () => {
     })
   })
 
+  it('migrates the old gateway default port', () => {
+    expect(
+      mergeSettings({
+        gateway: { baseUrl: ' http://127.0.0.1:8080/ ' },
+      }).gateway.baseUrl,
+    ).toBe('http://127.0.0.1:18878')
+  })
+
   it('normalizes projects and syncs the workspace root from the current project', () => {
     expect(
       mergeSettings({

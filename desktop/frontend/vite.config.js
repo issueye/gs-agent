@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import wails from '@wailsio/runtime/plugins/vite'
 
-const gatewayProxyTarget = process.env.GATEWAY_PROXY_TARGET || 'http://127.0.0.1:8080'
+const gatewayProxyTarget = process.env.GATEWAY_PROXY_TARGET || 'http://127.0.0.1:18878'
 
 const gatewayProxy = {
   target: gatewayProxyTarget,

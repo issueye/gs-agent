@@ -59,13 +59,14 @@ export const useChatStore = defineStore('chat', {
       const projectsStore = useProjectsStore()
       const baseUrl = settingsStore.settings.gateway.baseUrl
       const metadata = projectsStore.currentProjectMetadata
+      const conversationAgentId = conversationId ? conversationsStore.byId(conversationId)?.agentId || '' : ''
 
-      const requestedAgentId = String(options.agentId || settingsStore.settings.gateway.defaultAgentId || '').trim()
+      const requestedAgentId = String(options.agentId || conversationAgentId || settingsStore.settings.gateway.defaultAgentId || '').trim()
       if (!conversationId && !agentsStore.items.some((item) => item.id === requestedAgentId)) {
         await agentsStore.fetchAgents(baseUrl)
       }
 
-      const agentId = String(options.agentId || settingsStore.settings.gateway.defaultAgentId || agentsStore.items[0]?.id || '').trim()
+      const agentId = String(options.agentId || conversationAgentId || settingsStore.settings.gateway.defaultAgentId || agentsStore.items[0]?.id || '').trim()
       if (!conversationId && !agentId) {
         throw new Error('当前网关没有可用 Agent，请先在网关中创建 Agent 后再发起对话')
       }
@@ -101,6 +102,7 @@ export const useChatStore = defineStore('chat', {
         const socket = this.createSocket(baseUrl, targetConversationId)
         await socket.startChat({
           conversationId: targetConversationId,
+          agentId,
           prompt: content,
           requestId,
           metadata,
@@ -209,7 +211,6 @@ export const useChatStore = defineStore('chat', {
               title: '网关任务',
               kind: 'agent.im',
               status: 'running',
-              rawInput: message.task.payload?.input?.text || '',
             })
           }
           break
@@ -233,7 +234,6 @@ export const useChatStore = defineStore('chat', {
             title: '网关任务',
             kind: message.task?.kind || 'agent.im',
             status: 'completed',
-            rawOutput: message.task?.result || message.answer || '',
           })
           conversationsStore.markAssistantDraftComplete(conversationId)
           conversationsStore.bumpConversationRunning(conversationId, false)
@@ -265,9 +265,32 @@ export const useChatStore = defineStore('chat', {
       const conversationsStore = useConversationsStore()
       const event = message.event || {}
       const kind = event.kind || 'event'
+      const payload = event.payload || {}
       const taskId = message.taskId || event.taskId || this.streamsByConversationId[conversationId]?.sessionId || ''
       if (kind === 'text_delta') {
-        conversationsStore.appendAssistantDelta(conversationId, event.payload?.text || '')
+        conversationsStore.appendAssistantDelta(conversationId, payload.text || '')
+        return
+      }
+      if (kind === 'tool_call') {
+        conversationsStore.upsertToolMessage(conversationId, {
+          sessionUpdate: 'tool_call',
+          toolCallId: payload.id || taskId || `tool_${Date.now().toString(36)}`,
+          title: toolTitle(payload.name || kind),
+          kind: toolKind(payload.name || kind),
+          status: 'running',
+          rawInput: payload.args || '',
+        })
+        return
+      }
+      if (kind === 'tool_result') {
+        conversationsStore.upsertToolMessage(conversationId, {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: payload.id || taskId || `tool_${Date.now().toString(36)}`,
+          title: toolTitle(payload.name || kind),
+          kind: toolKind(payload.name || kind),
+          status: 'completed',
+          rawOutput: payload.content || payload.result || payload,
+        })
         return
       }
       conversationsStore.upsertToolMessage(conversationId, {
@@ -338,4 +361,24 @@ function conversationHasAssistantText(messages, text) {
     return false
   }
   return messages.some((item) => item.role === 'assistant' && String(item.content || '').trim() === normalized)
+}
+
+function toolKind(name) {
+  const value = String(name || '').trim().toLowerCase()
+  if (value.includes('search')) return 'search'
+  if (['read', 'list', 'view'].includes(value)) return 'read'
+  if (['edit', 'write', 'patch'].includes(value)) return 'edit'
+  if (['bash', 'shell', 'command', 'terminal', 'exec'].includes(value)) return 'execute'
+  if (['fetch', 'http', 'web_fetch'].includes(value)) return 'fetch'
+  return value || 'tool'
+}
+
+function toolTitle(name) {
+  const kind = toolKind(name)
+  if (kind === 'search') return '联网搜索'
+  if (kind === 'read') return '读取资料'
+  if (kind === 'edit') return '修改文件'
+  if (kind === 'execute') return '执行命令'
+  if (kind === 'fetch') return '获取内容'
+  return '工具调用'
 }

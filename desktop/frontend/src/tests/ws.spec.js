@@ -24,6 +24,11 @@ describe('gateway websocket helpers', () => {
       conversationId: 'conv_1',
       sessionId: '',
       requestId: 'req_1',
+      taskId: '',
+      task: null,
+      answer: '',
+      result: null,
+      event: null,
       update: {
         sessionUpdate: 'agent_message_chunk',
         content: { type: 'text', text: 'hello', uri: '', mimeType: '', data: null },
@@ -41,6 +46,21 @@ describe('gateway websocket helpers', () => {
       code: '',
       error: '',
       metadata: {},
+    })
+  })
+
+  it('keeps native gs-gateway chat payloads', () => {
+    expect(
+      normalizeWSMessage({
+        type: 'done',
+        task: { id: 'task_1', result: { answer: 'hello' } },
+        answer: 'hello',
+      }),
+    ).toMatchObject({
+      type: 'done',
+      taskId: 'task_1',
+      task: { id: 'task_1', result: { answer: 'hello' } },
+      answer: 'hello',
     })
   })
 })

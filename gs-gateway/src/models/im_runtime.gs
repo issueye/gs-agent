@@ -28,6 +28,7 @@ export function createIMRuntime(gateway) {
     let senderId = textValue(value.senderId || value.sender || value.openId || value.userId || "");
     let chatId = textValue(value.chatId || value.chat || value.conversationId || value.roomId || senderId);
     let messageId = textValue(value.messageId || value.message_id || value.id || "");
+    let agentId = textValue(value.agentId || value.agent_id || value.agent || "");
     let channelId = channelIdFor({
       channelId: value.channelId || value.channel_id,
       platform: platform,
@@ -39,6 +40,7 @@ export function createIMRuntime(gateway) {
       chatId: chatId,
       senderId: senderId,
       text: textValue(value.text || value.content || value.message || ""),
+      agentId: agentId,
       platform: platform,
       adapter: adapter,
       replyTo: textValue(value.replyTo || value.reply_to || chatId || senderId),
@@ -94,6 +96,7 @@ export function createIMRuntime(gateway) {
         },
         input: {
           text: inbound.text,
+          agentId: inbound.agentId,
           im: {
             source: "im",
             channelId: inbound.channelId,
@@ -106,11 +109,13 @@ export function createIMRuntime(gateway) {
             platform: inbound.platform,
             adapter: inbound.adapter,
             replyTo: inbound.replyTo,
+            agentId: inbound.agentId,
             text: inbound.text,
           },
         },
         run: {
           mode: "im",
+          agentId: inbound.agentId,
         },
         raw: inbound.raw,
       },
@@ -149,6 +154,14 @@ export function createIMRuntime(gateway) {
     return store.listIMConversations(query.channelId || query.channel_id, query.limit);
   }
 
+  function listConversationMessages(id) {
+    return store.listIMConversationMessages(id);
+  }
+
+  function removeConversation(id) {
+    return store.removeIMConversation(id);
+  }
+
   return {
     normalizeInbound: normalizeInbound,
     receive: receive,
@@ -158,5 +171,7 @@ export function createIMRuntime(gateway) {
     updateChannel: updateChannel,
     removeChannel: removeChannel,
     listConversations: listConversations,
+    listConversationMessages: listConversationMessages,
+    removeConversation: removeConversation,
   };
 }

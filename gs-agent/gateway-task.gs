@@ -15,9 +15,52 @@ function gatewayTaskText(task) {
   return text;
 }
 
+function applyRuntimeConfig(app, runtimeConfig) {
+  let value = runtimeConfig || {};
+  let llm = value.llm || {};
+  let agent = value.agent || {};
+  if (!llm.apiKey && !llm.model && !llm.baseUrl && !agent.provider) {
+    return app;
+  }
+
+  if (!app.config.llm) {
+    app.config.llm = {};
+  }
+  if (!app.config.llm.anthropic) {
+    app.config.llm.anthropic = {};
+  }
+  if (llm.apiKey) {
+    app.config.llm.anthropic.apiKey = llm.apiKey;
+  }
+  if (llm.baseUrl) {
+    app.config.llm.anthropic.baseUrl = llm.baseUrl;
+  }
+  if (llm.model) {
+    app.config.llm.anthropic.model = llm.model;
+  }
+
+  app.agent.provider = "anthropic";
+  if (agent.system) {
+    app.agent.system = agent.system;
+    app.system = agent.system;
+  }
+  if (agent.maxTurns) {
+    app.agent.maxTurns = agent.maxTurns;
+  }
+  if (agent.tools && agent.tools.length > 0) {
+    app.agent.tools = agent.tools;
+  }
+  if (agent.skills) {
+    app.agent.skills = agent.skills;
+    app.agent.includeSkills = agent.skills.length > 0;
+  }
+  return app;
+}
+
 export function runGatewayTask(task) {
   let input = task || {};
   let app = loadAgentApp(input.root);
+  applyRuntimeConfig(app, input.config || {});
   let stream = input.stream || {};
   let streamWS = undefined;
 

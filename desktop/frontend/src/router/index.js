@@ -5,7 +5,6 @@ import ChatConversationView from '@/views/ChatConversationView.vue'
 import ChatHomeView from '@/views/ChatHomeView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import ProvidersView from '@/views/ProvidersView.vue'
-import QqUedView from '@/views/QqUedView.vue'
 import ScheduledTasksView from '@/views/ScheduledTasksView.vue'
 import SearchView from '@/views/SearchView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -21,11 +20,6 @@ const router = createRouter({
         { path: '', redirect: '/chat' },
         { path: '/chat', name: 'chat-home', component: ChatHomeView },
         { path: '/chat/:id', name: 'chat-conversation', component: ChatConversationView },
-        {
-          path: '/ued',
-          name: 'ued',
-          component: QqUedView,
-        },
         {
           path: '/search',
           name: 'search',
