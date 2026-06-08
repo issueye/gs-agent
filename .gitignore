@@ -1,1 +1,10 @@
-gs.exe
+*.exe
+*.log
+*.txt
+
+build/
+dist/
+**/dist/
+*.exe
+.gateway/
+agent.local.toml
