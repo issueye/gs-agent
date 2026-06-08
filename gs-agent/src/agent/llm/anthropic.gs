@@ -2,6 +2,7 @@ import { messagesUrl } from "@/agent/llm/anthropic-url";
 import { appendJsonLog } from "@/agent/log";
 
 let http = require("@std/net/http/client");
+let sse = require("@std/sse");
 let timers = require("@std/timers");
 
 // Anthropic 消息 content 可以是字符串或结构化块；工具结果统一转成文本。
@@ -119,6 +120,9 @@ export function anthropicRequestBody(options, messages, tools, turnOptions) {
 
   if ("temperature" in options) {
     body.temperature = options.temperature;
+  }
+  if (options.stream) {
+    body.stream = true;
   }
 
   return body;
@@ -281,12 +285,89 @@ export function createAnthropicProvider(options) {
     throw lastErr;
   }
 
+  function deltaTextFromEvent(event) {
+    if (!event || !event.data) {
+      return "";
+    }
+    let data = String(event.data || "");
+    if (data === "[DONE]") {
+      return "";
+    }
+    let payload = {};
+    try {
+      payload = JSON.parse(data);
+    } catch (error) {
+      return "";
+    }
+    if (payload.type === "content_block_delta") {
+      if (payload.delta && payload.delta.text) {
+        return String(payload.delta.text);
+      }
+    }
+    return "";
+  }
+
+  function requestStream(body, url) {
+    let response = http.stream({
+      method: "POST",
+      url: url,
+      timeoutMs: options.timeoutMs || 60000,
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      let errorBody = "";
+      if (response.body) {
+        errorBody = response.body.readAll();
+      }
+      if (response.close) {
+        response.close();
+      }
+      throw new Error("Anthropic request failed: " + String(response.status) + " " + errorBody);
+    }
+
+    let reader = sse.reader(response.body);
+    let text = "";
+    while (true) {
+      let event = reader.next();
+      if (event === null) {
+        break;
+      }
+      let delta = deltaTextFromEvent(event);
+      if (delta !== "") {
+        text = text + delta;
+        if (options.onDelta) {
+          options.onDelta({
+            text: delta,
+            content: text,
+          });
+        }
+      }
+    }
+    if (response.close) {
+      response.close();
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: text,
+        },
+      ],
+    };
+  }
+
   function next(messages, tools, turnOptions) {
     let body = anthropicRequestBody(options, messages, tools, turnOptions);
     let url = messagesUrl(baseUrl);
     logRequestBody(options, url, body);
 
-    let payload = requestWithRetry(body, url);
+    let payload = options.stream ? requestStream(body, url) : requestWithRetry(body, url);
     let toolUse = firstToolUse(payload.content);
     if (toolUse) {
       return {

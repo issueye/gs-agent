@@ -1,5 +1,5 @@
 [gateway]
-port = 8787
+port = 18878
 dataDir = ".gateway"
 database = ".gateway/gateway.db"
 agentRoot = "../gs-agent"
@@ -9,7 +9,3 @@ enabled = true
 
 [scheduler]
 enabled = true
-
-[agentBridge]
-defaultMode = "fake"
-allowReal = false

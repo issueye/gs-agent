@@ -19,7 +19,7 @@ function mergeObject(base, extra) {
 export function defaultConfig() {
   return {
     gateway: {
-      port: 8787,
+      port: 18878,
       dataDir: ".gateway",
       database: ".gateway/gateway.db",
       agentRoot: "../gs-agent",
@@ -29,10 +29,6 @@ export function defaultConfig() {
     },
     scheduler: {
       enabled: true,
-    },
-    agentBridge: {
-      defaultMode: "fake",
-      allowReal: false,
     },
   };
 }
@@ -46,7 +42,6 @@ export function loadConfig() {
     cfg.gateway = mergeObject(cfg.gateway, parsed.gateway);
     cfg.im = mergeObject(cfg.im, parsed.im);
     cfg.scheduler = mergeObject(cfg.scheduler, parsed.scheduler);
-    cfg.agentBridge = mergeObject(cfg.agentBridge, parsed.agentBridge);
   }
 
   cfg.root = root;

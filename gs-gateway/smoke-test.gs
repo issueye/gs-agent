@@ -8,6 +8,23 @@ function assertOK(value, message) {
   }
 }
 
+function assertError(fn, code, message) {
+  let failed = false;
+  let errorCode = "";
+  try {
+    fn();
+  } catch (error) {
+    failed = true;
+    let text = String(error.message || "");
+    if (text.startsWith("GATEWAY_ERROR|")) {
+      let parts = text.split("|");
+      errorCode = parts[2] || "";
+    }
+  }
+  assertOK(failed, message);
+  assertOK(errorCode === code, message + " code should be " + code + ", got " + errorCode);
+}
+
 function main() {
   let config = loadConfig();
   let store = openGatewayStore(config.gateway.database);
@@ -24,7 +41,19 @@ function main() {
     text: "hello gateway",
   });
   assertOK(received.event.id, "event id should be created");
+  assertOK(received.conversation.id, "conversation id should be created");
   assertOK(received.task.id, "task id should be created");
+  assertOK(received.task.payload.source.type === "im", "IM task should keep normalized source");
+  assertOK(received.task.payload.source.eventId === received.event.id, "IM task should keep event id");
+  assertOK(received.task.payload.input.text === "hello gateway", "IM task should keep input text");
+  assertOK(received.task.payload.input.im.platform === "onebot", "IM task should keep platform");
+  assertOK(received.task.payload.input.im.adapter === "qq-local", "IM task should keep adapter");
+  assertOK(received.task.payload.input.im.chat === "smoke-chat", "IM task should keep chat");
+  assertOK(received.task.payload.input.im.sender === "smoke-user", "IM task should keep sender");
+  let conversations = model.im.listConversations({
+    channelId: received.channel.id,
+  });
+  assertOK(conversations.length >= 1, "IM conversation should be listed");
 
   let task = store.updateTask(received.task.id, {
     status: "done",
@@ -49,75 +78,117 @@ function main() {
     description: "Updated smoke test skill.",
   });
   assertOK(updatedSkill.description === "Updated smoke test skill.", "skill should be updated");
+  try {
+    model.skills.remove("gateway-smoke-empty-description");
+  } catch (error) {
+  }
+  assertError(function() {
+    model.skills.create({
+      name: "gateway-smoke-empty-description",
+      description: "",
+      content: "# Gateway Smoke Skill\n",
+    });
+  }, "INVALID_SKILL_DESCRIPTION", "empty skill description should be rejected");
+  try {
+    model.skills.remove("gateway-smoke-skill-name-that-is-longer-than-sixty-four-characters-total");
+  } catch (error) {
+  }
+  assertError(function() {
+    model.skills.create({
+      name: "gateway-smoke-skill-name-that-is-longer-than-sixty-four-characters-total",
+      description: "Too long name smoke test.",
+      content: "# Gateway Smoke Skill\n",
+    });
+  }, "INVALID_SKILL_NAME", "too-long skill name should be rejected");
   let removedSkill = model.skills.remove(skillName);
   assertOK(removedSkill.name === skillName, "skill should be removed");
 
   let schedule = model.scheduler.create({
     name: "smoke schedule",
-    kind: "agent.smoke",
+    kind: "agent.schedule",
     schedule: {
-      dueAt: "2000-01-01T00:00:00.000Z",
+      type: "at",
+      at: "2000-01-01T00:00:00.000Z",
     },
-    payload: {
-      text: "scheduled smoke",
+    run: {
+      prompt: "scheduled smoke",
     },
   });
   assertOK(schedule.id, "schedule should be created");
-  let due = model.scheduler.dueToTasks({
+  assertOK(schedule.schedule.type === "at", "schedule should use at type");
+  assertOK(schedule.run.prompt === "scheduled smoke", "schedule should keep run prompt");
+  let tick = model.scheduler.tick({
     now: (new Date()).toISOString(),
   });
-  assertOK(due.tasks.length >= 1, "due schedule should create a task");
+  assertOK(tick.tasks.length >= 1, "scheduler tick should create a task");
+  assertOK(tick.tasks[0].payload.source.type === "schedule", "schedule task should keep source");
+  assertOK(tick.tasks[0].payload.input.text === "scheduled smoke", "schedule task should keep input text");
 
-  let bridgeTask = store.createTask({
-    name: "bridge dry run",
-    kind: "agent.dry_run",
-    payload: {
-      text: "dry run",
+  let manualSchedule = model.scheduler.create({
+    name: "manual smoke schedule",
+    kind: "agent.schedule",
+    schedule: {
+      type: "manual",
+    },
+    run: {
+      prompt: "manual scheduled smoke",
     },
   });
-  let bridgeResult = model.agentBridge.runTask(bridgeTask.id, {
-    dryRun: true,
+  let manualRun = model.scheduler.run(manualSchedule.id, {
+    now: (new Date()).toISOString(),
   });
-  assertOK(bridgeResult.status === "done", "bridge dry-run should finish task");
+  assertOK(manualRun.task.id, "manual schedule run should create a task");
+  let schedulerStatus = model.scheduler.status();
+  assertOK(schedulerStatus.total >= 1, "scheduler status should include schedules");
 
   let agentTask = store.createTask({
-    name: "bridge fake agent",
-    kind: "agent.fake",
-    payload: {
-      text: "fake agent run",
-    },
-  });
-  let agentResult = model.agentBridge.runTask(agentTask.id, {
-    mode: "fake",
-  });
-  assertOK(agentResult.status === "done", "bridge fake agent should finish task");
-  assertOK(agentResult.result.mode === "fake", "fake agent mode should be recorded");
-
-  let realBlocked = false;
-  let blockedTask = store.createTask({
-    name: "bridge real blocked",
+    name: "bridge real agent",
     kind: "agent.real",
     payload: {
-      text: "should be blocked",
+      source: {
+        type: "smoke",
+      },
+      input: {
+        text: "real agent run",
+      },
+      run: {
+        mode: "agent",
+      },
     },
   });
+  let agentBridgeFailed = false;
+  let agentBridgeError = "";
   try {
-    model.agentBridge.runTask(blockedTask.id, {
-      mode: "real",
-    });
+    model.agentBridge.runTask(agentTask.id);
   } catch (error) {
-    realBlocked = true;
+    agentBridgeFailed = true;
+    agentBridgeError = error.message || String(error);
   }
-  assertOK(realBlocked, "real bridge should be blocked by default");
+  let agentResult = store.getTask(agentTask.id);
+  if (agentBridgeFailed) {
+    assertOK(agentResult.status === "failed", "bridge should persist failed task when real agent cannot run");
+    assertOK(agentResult.result.error.message === agentBridgeError, "bridge failure should persist the surfaced error");
+  } else {
+    assertOK(agentResult.status === "done", "bridge should finish task when real agent config is available");
+    assertOK(agentResult.result.ok === true, "bridge success should return an ok agent result");
+  }
 
   let bridgeEvents = store.listEvents(20);
+  let sawBridgeFailed = false;
   let sawBridgeDone = false;
   for (let event of bridgeEvents) {
+    if (event.source === "agent_bridge" && event.type === "failed") {
+      sawBridgeFailed = true;
+    }
     if (event.source === "agent_bridge" && event.type === "done") {
       sawBridgeDone = true;
     }
   }
-  assertOK(sawBridgeDone, "bridge should record done event");
+  if (agentBridgeFailed) {
+    assertOK(sawBridgeFailed, "bridge should record failed event");
+  } else {
+    assertOK(sawBridgeDone, "bridge should record done event");
+  }
 
   let skills = model.agent.listSkills();
   let tools = model.agent.listDynamicTools();
@@ -127,9 +198,8 @@ function main() {
   println("agentRoot=" + config.gateway.agentRoot);
   println("skills=" + String(skills.length) + " tools=" + String(tools.length) + " plugins=" + String(plugins.length));
   println("task=" + task.id + " status=" + task.status);
-  println("schedule=" + schedule.id + " dueTasks=" + String(due.tasks.length));
-  println("bridge=" + bridgeResult.id + " status=" + bridgeResult.status);
-  println("agentBridge=" + agentResult.id + " mode=" + agentResult.result.mode);
+  println("schedule=" + schedule.id + " tickTasks=" + String(tick.tasks.length));
+  println("agentBridge=" + agentResult.id + " status=" + agentResult.status);
 }
 
 main();

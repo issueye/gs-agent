@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: #f5f7fa;
+  color: #222222;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100%;
+  background: #f5f7fa;
+}
+
+body {
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(0, 136, 255, 0.18);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(95, 104, 120, 0.26) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(95, 104, 120, 0.24);
+  background-clip: padding-box;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
