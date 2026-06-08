@@ -340,6 +340,85 @@ export function loadAgentApp(root) {
   };
 }
 
+function runCompletionBase(app, records, answer, afterAnswer, extra) {
+  fs.mkdirSync(path.dirname(app.answerFile), { recursive: true });
+  fs.writeTextSync(app.answerFile, answer.content + "\n");
+
+  let result = {
+    answer: answer.content,
+  };
+  if (afterAnswer) {
+    for (let key in afterAnswer) {
+      result[key] = afterAnswer[key];
+    }
+  }
+  let common = {
+    sessionId: app.sessionId,
+    sessionDir: app.sessionDir,
+    events: records.length,
+    sessionFile: app.sessionFile,
+    sessionArchiveFile: app.sessionArchiveFile,
+    answerFile: app.answerFile,
+    logFile: app.logFile,
+    latestLogFile: app.latestLogFile,
+    llmBodyLogFile: app.llmBodyLogFile,
+  };
+  for (let key in common) {
+    result[key] = common[key];
+  }
+  if (extra) {
+    for (let key in extra) {
+      result[key] = extra[key];
+    }
+  }
+  return result;
+}
+
+function logAgentRunStarted(app, logger, kind, extra) {
+  let info = modelInfo(app);
+  let fields = {
+    root: app.root,
+    provider: app.agent.provider,
+    model: info.model,
+    baseUrl: info.baseUrl,
+    maxTurns: app.agent.maxTurns,
+    tools: app.agent.tools,
+    skills: app.skills.length,
+  };
+  if (extra) {
+    for (let key in extra) {
+      fields[key] = extra[key];
+    }
+  }
+  fields.sessionFile = app.sessionFile;
+  fields.sessionArchiveFile = app.sessionArchiveFile;
+  fields.answerFile = app.answerFile;
+  logger.info("agent " + kind + " started", fields);
+}
+
+function finishAgentRun(app, logger, kind, kit, answer, extraLog, afterAnswer, extraResult) {
+  let records = kit.session.readAll();
+  let result = runCompletionBase(app, records, answer, afterAnswer, extraResult);
+  let fields = {
+    events: records.length,
+  };
+  if (extraLog) {
+    for (let key in extraLog) {
+      fields[key] = extraLog[key];
+    }
+  }
+  fields.answerFile = app.answerFile;
+  fields.sessionFile = app.sessionFile;
+  logger.info("agent " + kind + " finished", fields);
+  return result;
+}
+
+function failAgentRun(logger, kind, err) {
+  logger.error("agent " + kind + " failed", {
+    error: String(err),
+  });
+}
+
 // TUI 和命令行共用的真实运行入口；调用方可传入 taskText 和 onEvent。
 export function runAgentTask(options) {
   let app = options.app;
@@ -351,55 +430,19 @@ export function runAgentTask(options) {
     logger = createRunLogger(app.root, "agent");
   }
 
-  let session = startAgentSession(app);
-  let sessionFile = session.sessionFile;
-
-  let info = modelInfo(app);
-  logger.info("agent run started", {
-    root: app.root,
-    provider: app.agent.provider,
-    model: info.model,
-    baseUrl: info.baseUrl,
-    maxTurns: app.agent.maxTurns,
-    tools: app.agent.tools,
-    skills: app.skills.length,
+  startAgentSession(app);
+  logAgentRunStarted(app, logger, "run", {
     taskFile: app.taskFile,
-    sessionFile: sessionFile,
-    sessionArchiveFile: app.sessionArchiveFile,
-    answerFile: app.answerFile,
   });
 
   let kit = createAppKit(app, logger, options.onEvent);
 
   // agent.run 是同步闭环：模型 -> 工具 -> 模型，直到最终回答或达到 maxTurns。
-  let answer = undefined;
   try {
-    answer = kit.agent.run(taskPrompt(app.root, app.agent.taskFile, options.taskText));
-    let records = kit.session.readAll();
-    fs.mkdirSync(path.dirname(app.answerFile), { recursive: true });
-    fs.writeTextSync(app.answerFile, answer.content + "\n");
-    logger.info("agent run finished", {
-      events: records.length,
-      answerFile: app.answerFile,
-      sessionFile: sessionFile,
-    });
-
-    return {
-      answer: answer.content,
-      sessionId: app.sessionId,
-      sessionDir: app.sessionDir,
-      events: records.length,
-      sessionFile: sessionFile,
-      sessionArchiveFile: app.sessionArchiveFile,
-      answerFile: app.answerFile,
-      logFile: app.logFile,
-      latestLogFile: app.latestLogFile,
-      llmBodyLogFile: app.llmBodyLogFile,
-    };
+    let answer = kit.agent.run(taskPrompt(app.root, app.agent.taskFile, options.taskText));
+    return finishAgentRun(app, logger, "run", kit, answer);
   } catch (err) {
-    logger.error("agent run failed", {
-      error: String(err),
-    });
+    failAgentRun(logger, "run", err);
     throw err;
   }
 }
@@ -429,19 +472,8 @@ export function runAgentTurn(options) {
     startAgentSession(app);
   }
 
-  let info = modelInfo(app);
-  logger.info("agent turn started", {
-    root: app.root,
-    provider: app.agent.provider,
-    model: info.model,
-    baseUrl: info.baseUrl,
-    maxTurns: app.agent.maxTurns,
-    tools: app.agent.tools,
-    skills: app.skills.length,
+  logAgentRunStarted(app, logger, "turn", {
     messages: messages.length,
-    sessionFile: app.sessionFile,
-    sessionArchiveFile: app.sessionArchiveFile,
-    answerFile: app.answerFile,
   });
 
   app.agent.isCancelled = options.isCancelled;
@@ -449,33 +481,13 @@ export function runAgentTurn(options) {
 
   try {
     let answer = kit.agent.runMessages(messages, input.trim());
-    let records = kit.session.readAll();
-    fs.mkdirSync(path.dirname(app.answerFile), { recursive: true });
-    fs.writeTextSync(app.answerFile, answer.content + "\n");
-    logger.info("agent turn finished", {
-      events: records.length,
+    return finishAgentRun(app, logger, "turn", kit, answer, {
       messages: messages.length,
-      answerFile: app.answerFile,
-      sessionFile: app.sessionFile,
-    });
-
-    return {
-      answer: answer.content,
+    }, {
       messages: messages,
-      sessionId: app.sessionId,
-      sessionDir: app.sessionDir,
-      events: records.length,
-      sessionFile: app.sessionFile,
-      sessionArchiveFile: app.sessionArchiveFile,
-      answerFile: app.answerFile,
-      logFile: app.logFile,
-      latestLogFile: app.latestLogFile,
-      llmBodyLogFile: app.llmBodyLogFile,
-    };
-  } catch (err) {
-    logger.error("agent turn failed", {
-      error: String(err),
     });
+  } catch (err) {
+    failAgentRun(logger, "turn", err);
     throw err;
   }
 }

@@ -1,19 +1,12 @@
 import { loadAgentApp, runAgentTask } from "@/agent/app";
+import { imMessagePrompt } from "@/agent/im/bridge";
 
-function taskText(input) {
-  if (!input) {
-    return "";
+function gatewayTaskText(task) {
+  let input = task || {};
+  if (input.kind === "agent.im") {
+    return imMessagePrompt(input.payload.im);
   }
-  if (input.text) {
-    return String(input.text);
-  }
-  if (input.input && input.input.text) {
-    return String(input.input.text);
-  }
-  if (input.payload && input.payload.text) {
-    return String(input.payload.text);
-  }
-  return JSON.stringify(input);
+  return String(input.payload.text || "");
 }
 
 export function runGatewayTask(task) {
@@ -22,7 +15,7 @@ export function runGatewayTask(task) {
 
   let result = runAgentTask({
     app: app,
-    taskText: taskText(input.payload || input.input || input),
+    taskText: gatewayTaskText(input),
   });
   result.ok = true;
   return result;

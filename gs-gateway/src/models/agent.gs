@@ -1,3 +1,5 @@
+import { parseSkillDocument } from "../../../gs-agent/src/agent/skills/spec";
+
 let fs = require("@std/fs");
 let path = require("@std/path");
 let toml = require("@std/toml");
@@ -23,39 +25,12 @@ function listDirs(root) {
   return out;
 }
 
-function parseScalar(value) {
-  let text = String(value || "").trim();
-  if ((text.startsWith("\"") && text.endsWith("\"")) || (text.startsWith("'") && text.endsWith("'"))) {
-    return text.slice(1, text.length - 1);
-  }
-  return text;
-}
-
 function parseSkillFrontmatter(content) {
-  let text = String(content || "").replaceAll("\r\n", "\n");
-  if (!text.startsWith("---\n")) {
+  try {
+    return parseSkillDocument(content).metadata;
+  } catch (error) {
     return {};
   }
-  let end = text.indexOf("\n---", 4);
-  if (end < 0) {
-    return {};
-  }
-  let metadata = {};
-  let lines = text.slice(4, end).split("\n");
-  for (let line of lines) {
-    let trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) {
-      continue;
-    }
-    let colon = trimmed.indexOf(":");
-    if (colon < 0) {
-      continue;
-    }
-    let key = trimmed.slice(0, colon).trim();
-    let value = trimmed.slice(colon + 1).trim();
-    metadata[key] = parseScalar(value);
-  }
-  return metadata;
 }
 
 export function createAgentModel(agentRoot) {

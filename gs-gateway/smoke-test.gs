@@ -8,6 +8,23 @@ function assertOK(value, message) {
   }
 }
 
+function assertError(fn, code, message) {
+  let failed = false;
+  let errorCode = "";
+  try {
+    fn();
+  } catch (error) {
+    failed = true;
+    let text = String(error.message || "");
+    if (text.startsWith("GATEWAY_ERROR|")) {
+      let parts = text.split("|");
+      errorCode = parts[2] || "";
+    }
+  }
+  assertOK(failed, message);
+  assertOK(errorCode === code, message + " code should be " + code + ", got " + errorCode);
+}
+
 function main() {
   let config = loadConfig();
   let store = openGatewayStore(config.gateway.database);
@@ -25,6 +42,11 @@ function main() {
   });
   assertOK(received.event.id, "event id should be created");
   assertOK(received.task.id, "task id should be created");
+  assertOK(received.task.payload.im.source === "im", "IM task should keep normalized source");
+  assertOK(received.task.payload.im.platform === "onebot", "IM task should keep platform");
+  assertOK(received.task.payload.im.adapter === "qq-local", "IM task should keep adapter");
+  assertOK(received.task.payload.im.chat === "smoke-chat", "IM task should keep chat");
+  assertOK(received.task.payload.im.text === "hello gateway", "IM task should keep text");
 
   let task = store.updateTask(received.task.id, {
     status: "done",
@@ -49,6 +71,28 @@ function main() {
     description: "Updated smoke test skill.",
   });
   assertOK(updatedSkill.description === "Updated smoke test skill.", "skill should be updated");
+  try {
+    model.skills.remove("gateway-smoke-empty-description");
+  } catch (error) {
+  }
+  assertError(function() {
+    model.skills.create({
+      name: "gateway-smoke-empty-description",
+      description: "",
+      content: "# Gateway Smoke Skill\n",
+    });
+  }, "INVALID_SKILL_DESCRIPTION", "empty skill description should be rejected");
+  try {
+    model.skills.remove("gateway-smoke-skill-name-that-is-longer-than-sixty-four-characters-total");
+  } catch (error) {
+  }
+  assertError(function() {
+    model.skills.create({
+      name: "gateway-smoke-skill-name-that-is-longer-than-sixty-four-characters-total",
+      description: "Too long name smoke test.",
+      content: "# Gateway Smoke Skill\n",
+    });
+  }, "INVALID_SKILL_NAME", "too-long skill name should be rejected");
   let removedSkill = model.skills.remove(skillName);
   assertOK(removedSkill.name === skillName, "skill should be removed");
 

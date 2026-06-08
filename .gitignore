@@ -1,1 +1,7 @@
 gs.exe
+build/
+dist/
+**/dist/
+*.exe
+.gateway/
+agent.local.toml

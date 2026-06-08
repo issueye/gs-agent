@@ -107,6 +107,12 @@ Invoke-RestMethod `
 docs/migration-development-plan.md
 ```
 
+IM、定时任务和网关的调整设计见：
+
+```text
+docs/im-scheduler-gateway-design.md
+```
+
 ## 自检
 
 ```powershell
