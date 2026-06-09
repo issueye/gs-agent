@@ -351,7 +351,7 @@ watch(
     >
       <div class="grid gap-4">
         <div
-          class="rounded-xl border border-[color:var(--qq-border)] bg-white/76 px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]"
+          class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]"
         >
           <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -372,12 +372,12 @@ watch(
           <QqInput v-model="gatewayDialog.draftBaseUrl" placeholder="请输入网关地址" />
         </QqFormField>
 
-        <div class="grid gap-3 md:grid-cols-2">
-          <div class="rounded-xl border border-[color:var(--qq-border)] bg-white/68 px-3 py-3 text-sm">
+        <div class="grid gap-3 border-y border-[color:var(--qq-border)] py-3 md:grid-cols-2">
+          <div class="text-sm">
             <p class="text-xs uppercase text-[color:var(--qq-text-tertiary)]">Health</p>
             <p class="mt-2 break-all text-[color:var(--qq-text-primary)]">{{ gatewayHealthLabel }}</p>
           </div>
-          <div class="rounded-xl border border-[color:var(--qq-border)] bg-white/68 px-3 py-3 text-sm">
+          <div class="text-sm">
             <p class="text-xs uppercase text-[color:var(--qq-text-tertiary)]">Resources</p>
             <p class="mt-2 text-[color:var(--qq-text-primary)]">Agent {{ agentsStore.items.length }} · 会话 {{ conversationsStore.items.length }}</p>
           </div>
@@ -400,7 +400,7 @@ watch(
       description="删除后会话记录会从网关移除。"
       title="删除会话"
     >
-      <div class="rounded-xl border border-[color:var(--qq-border)] bg-white/76 px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
+      <div class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
         <p class="font-medium text-[color:var(--qq-text-primary)]">
           {{ conversationsStore.byId(conversationDeleteDialog.conversationId)?.title || 'Untitled Conversation' }}
         </p>

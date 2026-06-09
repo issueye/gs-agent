@@ -29,12 +29,12 @@ function statusTone(value) {
   if (value === 'online') return '#38e1b8'
   if (value === 'busy') return '#ffd968'
   if (value === 'offline') return '#ff9db9'
-  return 'rgba(255,255,255,0.56)'
+  return '#94a3b8'
 }
 </script>
 
 <template>
-  <div class="qq-panel overflow-hidden rounded-[6px]">
+  <div class="overflow-hidden border-y border-[color:var(--qq-border)]">
     <div class="scrollbar-thin overflow-x-auto">
       <table class="qq-table min-w-full">
         <thead>

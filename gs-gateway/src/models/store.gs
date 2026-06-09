@@ -757,6 +757,9 @@ export function openGatewayStore(databaseFile) {
   function listIMConversationMessages(id) {
     let conversation = getIMConversation(id);
     if (!conversation) {
+      conversation = getIMConversation("desktop:wails:" + String(id || ""));
+    }
+    if (!conversation) {
       return undefined;
     }
 
@@ -768,6 +771,10 @@ export function openGatewayStore(databaseFile) {
       let im = input.im || {};
       let source = payload.source || {};
       let matchesConversation = source.conversationId === id ||
+        source.conversationId === conversation.id ||
+        String(im.conversationId || im.conversation_id || "") === id ||
+        String(im.conversationId || im.conversation_id || "") === conversation.id ||
+        String(im.chatId || im.chat || "") === id ||
         (String(im.channelId || "") === String(conversation.channel_id || "") && String(im.chatId || im.chat || "") === String(conversation.chat_id || ""));
       if (!matchesConversation) {
         continue;
@@ -785,6 +792,25 @@ export function openGatewayStore(databaseFile) {
           created_at: task.created_at,
         });
       }
+
+      messages.push({
+        id: task.id + ":tool",
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          ID: task.id,
+          Name: "agent.im",
+          Title: "网关任务",
+          Kind: String(task.kind || "agent.im"),
+          Status: task.status,
+          Arguments: text,
+          Result: task.result || {},
+        }],
+        metadata: {
+          taskId: task.id,
+        },
+        created_at: task.created_at,
+      });
 
       let result = task.result || {};
       let answer = String(result.answer || "");

@@ -9,11 +9,11 @@ const props = defineProps({
 })
 
 const toneMap = {
-  default: 'border-[color:var(--qq-border)] bg-[rgba(255,255,255,0.08)] text-[color:var(--qq-text-secondary)]',
-  accent: 'border-transparent bg-[rgba(54,220,200,0.18)] text-[color:var(--qq-text-primary)]',
-  pink: 'border-transparent bg-[rgba(243,138,213,0.22)] text-[color:var(--qq-text-primary)]',
-  warning: 'border-transparent bg-[rgba(255,217,104,0.24)] text-[#31402d]',
-  success: 'border-transparent bg-[rgba(19,192,142,0.22)] text-[color:var(--qq-text-primary)]',
+  default: 'border-[color:var(--qq-border)] bg-white/70 text-[color:var(--qq-text-secondary)]',
+  accent: 'border-transparent bg-[rgba(0,136,255,0.12)] text-[color:var(--qq-accent-strong)]',
+  pink: 'border-transparent bg-[rgba(124,58,237,0.12)] text-[color:var(--qq-accent-pink)]',
+  warning: 'border-transparent bg-[rgba(217,119,6,0.14)] text-[#8a4b05]',
+  success: 'border-transparent bg-[rgba(16,185,129,0.14)] text-[#047857]',
 }
 
 const classes = computed(() => toneMap[props.tone] || toneMap.default)

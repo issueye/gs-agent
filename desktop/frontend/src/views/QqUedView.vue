@@ -17,12 +17,12 @@ import QqTag from '@/components/ued/QqTag.vue'
 import QqTextarea from '@/components/ued/QqTextarea.vue'
 
 const colorTokens = [
-  { name: 'QQ Mint', value: '#36dcc8', role: '主操作、焦点、选中态' },
-  { name: 'QQ Green', value: '#13c08e', role: '渐变落点、强调按钮' },
-  { name: 'QQ Pink', value: '#f38ad5', role: '辅助标签、提醒态' },
-  { name: 'Glass White', value: 'rgba(255,255,255,0.14)', role: '面板高光层' },
-  { name: 'Text Soft', value: 'rgba(235,255,248,0.78)', role: '次级文本' },
-  { name: 'Signal Yellow', value: '#ffd968', role: '必填、轻提示' },
+  { name: 'Accent Blue', value: '#0088ff', role: '主操作、焦点、选中态' },
+  { name: 'Accent Strong', value: '#006ed0', role: '悬停态、强调按钮' },
+  { name: 'Accent Purple', value: '#7c3aed', role: '辅助标签、提醒态' },
+  { name: 'Glass White', value: 'rgba(255,255,255,0.86)', role: '面板高光层' },
+  { name: 'Text Soft', value: '#4b5563', role: '次级文本' },
+  { name: 'Signal Yellow', value: '#d97706', role: '必填、轻提示' },
 ]
 
 const spacingRules = [
@@ -144,7 +144,7 @@ const currentTabLabel = computed(() => tabs.find((item) => item.value === curren
                   <p class="text-sm font-medium">{{ token.name }}</p>
                   <p class="mt-2 text-xs text-[color:var(--qq-text-tertiary)]">{{ token.role }}</p>
                 </div>
-                <span class="h-10 w-10 rounded-[4px] border border-white/15" :style="{ background: token.value }" />
+              <span class="h-10 w-10 rounded-[4px] border border-[color:var(--qq-border)]" :style="{ background: token.value }" />
               </div>
               <p class="mt-4 text-xs text-[color:var(--qq-text-secondary)]">{{ token.value }}</p>
             </div>
@@ -270,7 +270,7 @@ const currentTabLabel = computed(() => tabs.find((item) => item.value === curren
             </QqFormField>
           </div>
 
-          <div class="mt-4 rounded-[4px] border border-white/10 bg-[rgba(9,32,28,0.22)] px-3 py-3 text-sm text-[color:var(--qq-text-secondary)]">
+          <div class="mt-4 rounded-[4px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3 text-sm text-[color:var(--qq-text-secondary)]">
             {{ formSummary }}
           </div>
 
@@ -358,7 +358,7 @@ const currentTabLabel = computed(() => tabs.find((item) => item.value === curren
       @confirm="modalOpen = false"
     >
       <div class="grid gap-4">
-        <div class="rounded-[4px] border border-white/10 bg-[rgba(9,32,28,0.22)] px-3 py-3">
+        <div class="rounded-[4px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3">
           <p class="text-sm font-medium text-[color:var(--qq-text-primary)]">{{ form.appName }}</p>
           <p class="mt-2 text-sm leading-7 text-[color:var(--qq-text-secondary)]">{{ form.introduction }}</p>
         </div>

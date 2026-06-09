@@ -16,7 +16,7 @@ defineProps({
 </script>
 
 <template>
-  <section class="qq-panel rounded-[6px] px-4 py-4 md:px-5 md:py-5">
+  <section class="border-t border-[color:var(--qq-border)] pt-5">
     <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div class="max-w-2xl">
         <p v-if="eyebrow" class="text-xs uppercase tracking-[0.18em] text-[color:var(--qq-text-tertiary)]">{{ eyebrow }}</p>

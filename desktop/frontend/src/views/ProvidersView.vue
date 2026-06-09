@@ -189,30 +189,28 @@ onMounted(() => {
 <template>
   <section class="scrollbar-thin h-full overflow-y-auto px-5 py-5">
     <div class="mx-auto max-w-7xl space-y-4">
-      <section class="qq-panel-strong rounded-[8px] px-4 py-4">
-        <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div class="min-w-0">
-            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--qq-text-tertiary)]">Providers</p>
-            <h2 class="mt-1 text-2xl font-semibold text-[color:var(--qq-text-primary)]">供应商管理</h2>
-          </div>
-          <div class="grid gap-2 sm:grid-cols-3 xl:min-w-[520px]">
-            <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/55 px-3 py-2">
-              <p class="text-xs text-[color:var(--qq-text-tertiary)]">总数</p>
-              <p class="mt-1 text-xl font-semibold">{{ providersStore.items.length }}</p>
-            </div>
-            <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/55 px-3 py-2">
-              <p class="text-xs text-[color:var(--qq-text-tertiary)]">启用</p>
-              <p class="mt-1 text-xl font-semibold">{{ activeProviders.length }}</p>
-            </div>
-            <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/55 px-3 py-2">
-              <p class="text-xs text-[color:var(--qq-text-tertiary)]">密钥</p>
-              <p class="mt-1 text-xl font-semibold">{{ configuredKeys.length }}</p>
-            </div>
-          </div>
+      <header class="flex flex-col gap-3 border-b border-[color:var(--qq-border)] pb-4 xl:flex-row xl:items-end xl:justify-between">
+        <div class="min-w-0">
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--qq-text-tertiary)]">Providers</p>
+          <h2 class="mt-1 text-2xl font-semibold text-[color:var(--qq-text-primary)]">供应商管理</h2>
         </div>
-      </section>
+        <dl class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">总数</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ providersStore.items.length }}</dd>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">启用</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ activeProviders.length }}</dd>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">密钥</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ configuredKeys.length }}</dd>
+          </div>
+        </dl>
+      </header>
 
-      <section class="qq-panel rounded-[8px] px-4 py-4">
+      <section class="py-1">
         <div class="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_170px_150px_auto] xl:items-center">
           <QqInput v-model="query" placeholder="搜索名称、ID、模型或 Base URL">
             <template #prefix>
@@ -353,7 +351,7 @@ onMounted(() => {
       description="删除后，绑定该供应商的 Agent 会失去这份模型配置。"
       title="删除供应商"
     >
-      <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
+      <div class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
         <p class="font-medium text-[color:var(--qq-text-primary)]">{{ deleteDialog.provider?.name || '-' }}</p>
         <p class="mt-1 break-all">ID {{ deleteDialog.provider?.id || '-' }}</p>
         <p class="mt-1">关联 Agent {{ deleteDialog.provider ? agentUsage(deleteDialog.provider.id) : 0 }}</p>

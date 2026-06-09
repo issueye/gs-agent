@@ -22,7 +22,7 @@ const props = defineProps({
 
 const variantClassMap = {
   primary:
-    'border-transparent bg-zinc-950 text-white shadow-[0_10px_22px_rgba(15,23,42,0.16)] hover:bg-zinc-800',
+    'border-transparent bg-[color:var(--qq-accent)] text-white shadow-[0_10px_22px_rgba(0,136,255,0.18)] hover:bg-[color:var(--qq-accent-strong)]',
   secondary:
     'border-[color:var(--qq-border)] bg-white/80 text-[color:var(--qq-text-primary)] shadow-sm hover:bg-white',
   ghost:

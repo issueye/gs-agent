@@ -18,14 +18,14 @@ defineProps({
 </script>
 
 <template>
-  <section class="flex min-h-[260px] items-center justify-center border border-white/10 bg-[rgba(11,36,31,0.24)] px-6 py-10" style="border-radius: 6px;">
+  <section class="flex min-h-[260px] items-center justify-center border border-[color:var(--qq-border)] bg-white/62 px-6 py-10" style="border-radius: 6px;">
     <div class="max-w-md text-center">
-      <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.08)] text-[color:var(--qq-accent)]">
+      <div class="mx-auto flex h-10 w-10 items-center justify-center rounded-[4px] border border-[color:var(--qq-border)] bg-white/80 text-[color:var(--qq-accent)]">
         <Loader2 v-if="state === 'loading'" class="h-5 w-5 animate-spin" />
-        <AlertTriangle v-else-if="state === 'gateway'" class="h-5 w-5 text-amber-200" />
+        <AlertTriangle v-else-if="state === 'gateway'" class="h-5 w-5 text-amber-600" />
         <Search v-else class="h-5 w-5" />
       </div>
-      <h2 class="mt-4 text-base font-semibold text-slate-50">{{ title }}</h2>
+      <h2 class="mt-4 text-base font-semibold text-[color:var(--qq-text-primary)]">{{ title }}</h2>
       <p class="mt-2 text-sm leading-6 text-[color:var(--qq-text-secondary)]">{{ description }}</p>
     </div>
   </section>

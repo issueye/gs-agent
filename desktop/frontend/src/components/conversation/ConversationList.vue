@@ -59,7 +59,7 @@ function isRunning(conversation, runningConversationIds) {
         <PanelLeftOpen class="h-4 w-4" />
       </button>
       <button
-        class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-950 text-white shadow-sm transition hover:bg-zinc-800"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--qq-accent)] text-white shadow-sm transition hover:bg-[color:var(--qq-accent-strong)]"
         type="button"
         title="新建会话"
         @click="$emit('new-chat')"
@@ -112,7 +112,7 @@ function isRunning(conversation, runningConversationIds) {
           <RefreshCw class="h-4 w-4" />
         </button>
         <button
-          class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-950 text-white shadow-sm transition hover:bg-zinc-800"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--qq-accent)] text-white shadow-sm transition hover:bg-[color:var(--qq-accent-strong)]"
           type="button"
           title="新建会话"
           @click="$emit('new-chat')"

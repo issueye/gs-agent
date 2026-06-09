@@ -210,6 +210,48 @@ describe('chat store', () => {
     expect(messages[2].content).toBe('done')
   })
 
+  it('normalizes gateway task history into a visible completed tool message', () => {
+    const messages = normalizeMessages([
+      {
+        id: 'task_1:user',
+        role: 'user',
+        content: '今天成都的天气',
+        created_at: '2026-06-09T00:00:00Z',
+      },
+      {
+        id: 'task_1:tool',
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          ID: 'task_1',
+          Name: 'agent.im',
+          Title: '网关任务',
+          Kind: 'agent.im',
+          Status: 'done',
+          Arguments: '今天成都的天气',
+          Result: { answer: '成都天气晴' },
+        }],
+        created_at: '2026-06-09T00:00:01Z',
+      },
+      {
+        id: 'task_1:assistant',
+        role: 'assistant',
+        content: '成都天气晴',
+        created_at: '2026-06-09T00:00:02Z',
+      },
+    ])
+
+    expect(messages).toHaveLength(3)
+    expect(messages[1].role).toBe('tool')
+    expect(messages[1].metadata.toolCallId).toBe('task_1')
+    expect(messages[1].metadata.toolTitle).toBe('网关任务')
+    expect(messages[1].metadata.toolKind).toBe('agent.im')
+    expect(messages[1].metadata.toolStatus).toBe('completed')
+    expect(messages[1].draft).toBe(false)
+    expect(messages[1].content).toContain('今天成都的天气')
+    expect(messages[1].content).toContain('成都天气晴')
+  })
+
   it('does not create empty assistant messages for usage-only updates', () => {
     const chatStore = useChatStore()
     const conversationsStore = useConversationsStore()

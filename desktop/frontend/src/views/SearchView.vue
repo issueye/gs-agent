@@ -67,11 +67,11 @@ async function refresh() {
 
 <template>
   <section class="flex h-full min-h-0 flex-col">
-    <header class="border-b border-white/10 bg-[rgba(18,58,51,0.34)] px-4 py-4 backdrop-blur-xl">
+    <header class="border-b border-[color:var(--qq-border)] bg-white/70 px-4 py-4 backdrop-blur-xl">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div class="min-w-0">
           <p class="text-xs uppercase tracking-[0.2em] text-[color:var(--qq-text-tertiary)]">Local Search</p>
-          <h2 class="mt-1 text-lg font-semibold text-slate-50">搜索本地会话缓存</h2>
+          <h2 class="mt-1 text-lg font-semibold text-[color:var(--qq-text-primary)]">搜索本地会话缓存</h2>
           <p class="mt-1 text-sm text-[color:var(--qq-text-secondary)]">
             {{ searchStore.summary.conversations }} 个会话 · {{ searchStore.summary.cachedMessages }} 条缓存消息 · {{ resultCountLabel }}
           </p>
@@ -96,7 +96,7 @@ async function refresh() {
           </template>
         </QqInput>
         <button
-          class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.08)] text-[color:var(--qq-text-secondary)] transition hover:border-white/20 hover:bg-[rgba(255,255,255,0.14)] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+          class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-[color:var(--qq-border)] bg-white/80 text-[color:var(--qq-text-secondary)] transition hover:border-[color:var(--qq-border-strong)] hover:bg-white hover:text-[color:var(--qq-text-primary)] disabled:cursor-not-allowed disabled:opacity-45"
           type="button"
           title="清空搜索"
           :disabled="!searchStore.query"
@@ -108,8 +108,8 @@ async function refresh() {
     </header>
 
     <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-4">
-      <div v-if="gatewayNotice" class="mb-4 border border-amber-200/20 bg-amber-200/10 px-4 py-3" style="border-radius: 6px;" data-testid="search-gateway-notice">
-        <p class="text-sm font-semibold text-amber-100">{{ gatewayNotice.title }}</p>
+      <div v-if="gatewayNotice" class="mb-4 border border-amber-200 bg-amber-50 px-4 py-3" style="border-radius: 6px;" data-testid="search-gateway-notice">
+        <p class="text-sm font-semibold text-amber-800">{{ gatewayNotice.title }}</p>
         <p class="mt-1 text-sm leading-6 text-[color:var(--qq-text-secondary)]">{{ gatewayNotice.description }}</p>
       </div>
 

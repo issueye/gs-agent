@@ -6,11 +6,11 @@
   --qq-surface: rgba(255, 255, 255, 0.86);
   --qq-surface-soft: rgba(247, 250, 253, 0.84);
   --qq-surface-softer: rgba(244, 247, 252, 0.72);
-  --qq-border: rgba(15, 23, 42, 0.1);
-  --qq-border-strong: rgba(15, 23, 42, 0.18);
+  --qq-border: rgba(15, 23, 42, 0.14);
+  --qq-border-strong: rgba(15, 23, 42, 0.24);
   --qq-text-primary: #222222;
-  --qq-text-secondary: #5f6878;
-  --qq-text-tertiary: #8a93a4;
+  --qq-text-secondary: #4b5563;
+  --qq-text-tertiary: #6b7280;
   --qq-accent: #0088ff;
   --qq-accent-strong: #006ed0;
   --qq-accent-pink: #7c3aed;
@@ -106,7 +106,7 @@
 }
 
 .qq-field-control::placeholder {
-  color: var(--qq-text-tertiary);
+  color: #64748b;
 }
 
 .qq-field-control:hover {
@@ -154,7 +154,7 @@
 .qq-table th {
   font-size: 12px;
   font-weight: 600;
-  color: var(--qq-text-tertiary);
+  color: #64748b;
   text-align: left;
 }
 

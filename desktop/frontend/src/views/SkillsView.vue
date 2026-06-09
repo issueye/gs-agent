@@ -117,11 +117,11 @@ onMounted(() => {
     <input ref="fileInput" class="hidden" type="file" accept=".zip,application/zip" @change="handleZipSelected" />
 
     <div class="mx-auto max-w-7xl space-y-5">
-      <section class="qq-panel-strong rounded-[8px] px-5 py-5">
+      <header class="border-b border-[color:var(--qq-border)] pb-5">
         <p class="text-xs uppercase tracking-[0.24em] text-[color:var(--qq-text-tertiary)]">Skills</p>
         <div class="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 class="text-3xl font-semibold text-slate-50">技能包管理</h2>
+            <h2 class="text-3xl font-semibold text-[color:var(--qq-text-primary)]">技能包管理</h2>
             <p class="mt-4 max-w-3xl text-sm leading-7 text-[color:var(--qq-text-secondary)]">
               从 zip 技能包导入 SKILL.md 以及 scripts、references、assets 支持文件，网关会发布到本地 .skills 并供 Claw 实例加载。
             </p>
@@ -138,23 +138,23 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="mt-5 grid gap-3 md:grid-cols-3">
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-3">
-            <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Total</p>
-            <p class="mt-2 text-2xl font-semibold text-[color:var(--qq-text-primary)]">{{ skillsStore.items.length }}</p>
+        <dl class="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">Total</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ skillsStore.items.length }}</dd>
           </div>
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-3">
-            <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Active</p>
-            <p class="mt-2 text-2xl font-semibold text-[color:var(--qq-text-primary)]">{{ skillsStore.activeSkills.length }}</p>
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">Active</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ skillsStore.activeSkills.length }}</dd>
           </div>
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-3">
-            <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Inactive</p>
-            <p class="mt-2 text-2xl font-semibold text-[color:var(--qq-text-primary)]">{{ inactiveSkills.length }}</p>
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">Inactive</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ inactiveSkills.length }}</dd>
           </div>
-        </div>
-      </section>
+        </dl>
+      </header>
 
-      <section class="qq-panel rounded-[6px] px-5 py-5">
+      <section class="pt-1">
         <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <p class="text-xs uppercase tracking-[0.18em] text-[color:var(--qq-text-tertiary)]">Directory</p>
@@ -163,10 +163,10 @@ onMounted(() => {
           <span class="qq-badge w-fit rounded-[4px] px-2 py-0.5 text-[11px]">zip · SKILL.md</span>
         </div>
 
-        <div class="mt-5 grid gap-3">
+        <div class="mt-5 divide-y divide-[color:var(--qq-border)] border-y border-[color:var(--qq-border)]">
           <div
             v-if="!skillsStore.items.length"
-            class="rounded-[6px] border border-dashed border-white/15 bg-[rgba(9,32,28,0.16)] px-4 py-6 text-sm text-[color:var(--qq-text-secondary)]"
+            class="px-1 py-6 text-sm text-[color:var(--qq-text-secondary)]"
           >
             当前网关还没有安装技能。导入 zip 技能包后，Agent 可以在配置里绑定对应 skill id。
           </div>
@@ -174,7 +174,7 @@ onMounted(() => {
           <div
             v-for="skill in skillsStore.items"
             :key="skill.id"
-            class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-4"
+            class="py-4"
           >
             <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div class="min-w-0">
@@ -184,7 +184,7 @@ onMounted(() => {
                   <span class="qq-badge rounded-[4px] px-2 py-0.5 text-[11px]">{{ skill.version || 'v1' }}</span>
                   <span
                     class="rounded-[4px] px-2 py-0.5 text-[11px]"
-                    :class="skill.status === 'active' ? 'bg-emerald-300/15 text-emerald-100' : 'bg-white/10 text-[color:var(--qq-text-tertiary)]'"
+                    :class="skill.status === 'active' ? 'bg-[rgba(16,185,129,0.14)] text-[#047857]' : 'bg-white/70 text-[color:var(--qq-text-tertiary)]'"
                   >
                     {{ skill.status === 'active' ? '启用' : skill.status }}
                   </span>
@@ -216,11 +216,11 @@ onMounted(() => {
       :description="importDialog.fileName || '请选择 zip 技能包'"
       title="导入技能包"
     >
-      <div v-if="importDialog.error" class="rounded-[6px] border border-rose-300/20 bg-rose-300/10 px-3 py-3 text-sm leading-6 text-rose-100">
+      <div v-if="importDialog.error" class="border-y border-rose-200 bg-rose-50 py-3 text-sm leading-6 text-rose-700">
         {{ importDialog.error }}
       </div>
       <div v-else-if="importDialog.skill" class="grid gap-3">
-        <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3">
+        <div class="border-y border-[color:var(--qq-border)] py-3">
           <div class="flex flex-wrap items-center gap-2">
             <Archive class="h-4 w-4 text-[color:var(--qq-accent)]" />
             <p class="text-sm font-semibold text-[color:var(--qq-text-primary)]">{{ importDialog.skill.name }}</p>
@@ -230,17 +230,17 @@ onMounted(() => {
           <p class="mt-2 break-all text-xs text-[color:var(--qq-text-tertiary)]">Path {{ importDialog.skill.path }}</p>
         </div>
         <div class="grid gap-3 md:grid-cols-2">
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3">
+          <div class="border-y border-[color:var(--qq-border)] py-3">
             <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Support files</p>
             <p class="mt-2 text-xl font-semibold text-[color:var(--qq-text-primary)]">{{ supportFileCount }}</p>
           </div>
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3">
+          <div class="border-y border-[color:var(--qq-border)] py-3">
             <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Mode</p>
             <p class="mt-2 text-sm text-[color:var(--qq-text-primary)]">同名技能将更新</p>
           </div>
         </div>
       </div>
-      <div v-else class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3 text-sm text-[color:var(--qq-text-secondary)]">
+      <div v-else class="border-y border-[color:var(--qq-border)] py-3 text-sm text-[color:var(--qq-text-secondary)]">
         正在读取技能包...
       </div>
 
@@ -261,7 +261,7 @@ onMounted(() => {
       description="删除后，该技能会从网关管理目录和 active 技能目录移除。"
       title="删除技能"
     >
-      <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
+      <div class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
         <p class="font-medium text-[color:var(--qq-text-primary)]">{{ deleteDialog.skill?.name || '未选择技能' }}</p>
         <p class="mt-1">{{ deleteDialog.skill?.description || '-' }}</p>
       </div>

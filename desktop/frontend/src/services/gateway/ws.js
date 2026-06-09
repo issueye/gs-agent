@@ -77,6 +77,7 @@ export class GatewayChatSocket {
         platform: 'desktop',
         adapter: 'wails',
         sender: input.metadata?.project?.name || input.metadata?.projectName || 'desktop-user',
+        conversationId: input.conversationId || '',
         chat: input.conversationId || 'desktop-chat',
         agentId: input.agentId || '',
         messageId: input.requestId,

@@ -24,7 +24,7 @@ export async function createConversation(baseUrl, input) {
 
 export async function listConversationMessages(baseUrl, conversationId) {
   const payload = await fetchJSON(baseUrl, `/api/im/conversations/${encodeURIComponent(conversationId)}/messages`)
-  return (Array.isArray(payload) ? payload : payload?.messages || []).map(normalizeMessage)
+  return normalizeMessages(Array.isArray(payload) ? payload : payload?.messages || [])
 }
 
 export async function deleteConversation(baseUrl, conversationId) {
@@ -109,7 +109,7 @@ export function normalizeMessages(messages = []) {
       }
       for (const call of toolCalls) {
         out.push(buildToolMessage(normalized, call, {
-          toolStatus: toolValue(call, 'Result', 'result') ? 'completed' : 'pending',
+          toolStatus: toolStatusFromCall(call, toolValue(call, 'Result', 'result') ? 'completed' : 'pending'),
           rawInput: toolValue(call, 'Arguments', 'arguments'),
           rawOutput: toolValue(call, 'Result', 'result'),
         }))
@@ -122,13 +122,33 @@ export function normalizeMessages(messages = []) {
   return out
 }
 
+function toolStatusFromCall(call, fallback = 'pending') {
+  const status = String(toolValue(call, 'Status', 'status') || '').trim()
+  if (status === 'done' || status === 'success' || status === 'ok') {
+    return 'completed'
+  }
+  if (status === 'running' || status === 'pending' || status === 'in_progress') {
+    return status
+  }
+  if (status === 'error') {
+    return 'failed'
+  }
+  if (status === 'failed' || status === 'cancelled') {
+    return status
+  }
+  return fallback
+}
+
 function buildToolMessage(source, call, patch = {}) {
+  const name = toolValue(call, 'Name', 'name')
+  const title = toolValue(call, 'Title', 'title') || name || '工具调用'
+  const kind = toolValue(call, 'Kind', 'kind') || toolKind(name)
   const metadata = {
     ...(source.metadata || {}),
     sessionUpdate: 'tool_call',
     toolCallId: patch.toolCallId || toolValue(call, 'ID', 'id') || source.id,
-    toolTitle: toolValue(call, 'Name', 'name') || '工具调用',
-    toolKind: toolKind(toolValue(call, 'Name', 'name')),
+    toolTitle: title,
+    toolKind: kind,
     toolStatus: patch.toolStatus || 'pending',
   }
   if (patch.rawInput !== undefined && patch.rawInput !== null && patch.rawInput !== '') {
@@ -145,7 +165,7 @@ function buildToolMessage(source, call, patch = {}) {
     content: toolMessageContent(metadata),
     metadata,
     toolCalls: [],
-    draft: metadata.toolStatus !== 'completed',
+    draft: !['completed', 'failed', 'cancelled'].includes(metadata.toolStatus),
   }
 }
 
@@ -158,6 +178,7 @@ function toolValue(call, upperKey, lowerKey) {
 
 function toolKind(name) {
   const value = String(name || '').trim().toLowerCase()
+  if (value === 'agent.im') return 'agent.im'
   if (['read', 'list', 'view'].includes(value)) return 'read'
   if (['edit', 'write', 'patch'].includes(value)) return 'edit'
   if (['delete', 'remove'].includes(value)) return 'delete'

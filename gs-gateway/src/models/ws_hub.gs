@@ -80,6 +80,7 @@ function normalizeClientPayload(input) {
     platform: String(value.platform || "web-chat"),
     adapter: String(value.adapter || "browser"),
     sender: String(value.sender || value.senderId || "tester"),
+    conversationId: String(value.conversationId || value.conversation_id || ""),
     chat: String(value.chat || value.chatId || "browser-chat-001"),
     agentId: String(value.agentId || value.agent_id || value.agent || ""),
     messageId: String(value.messageId || ("web-" + String((new Date()).getTime()))),

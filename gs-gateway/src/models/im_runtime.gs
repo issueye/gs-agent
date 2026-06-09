@@ -27,6 +27,7 @@ export function createIMRuntime(gateway) {
     let adapter = textValue(value.adapter || "default");
     let senderId = textValue(value.senderId || value.sender || value.openId || value.userId || "");
     let chatId = textValue(value.chatId || value.chat || value.conversationId || value.roomId || senderId);
+    let conversationId = textValue(value.conversationId || value.conversation_id || "");
     let messageId = textValue(value.messageId || value.message_id || value.id || "");
     let agentId = textValue(value.agentId || value.agent_id || value.agent || "");
     let channelId = channelIdFor({
@@ -36,6 +37,7 @@ export function createIMRuntime(gateway) {
     });
     return {
       channelId: channelId,
+      conversationId: conversationId,
       messageId: messageId,
       chatId: chatId,
       senderId: senderId,
@@ -68,6 +70,7 @@ export function createIMRuntime(gateway) {
     let subject = inbound.chatId || inbound.senderId || inbound.messageId || "";
     let event = store.addEvent("im", "inbound_message", subject, inbound, "received");
     let conversation = store.upsertIMConversation({
+      id: inbound.conversationId || undefined,
       channelId: inbound.channelId,
       chatId: inbound.chatId,
       senderId: inbound.senderId,
@@ -99,6 +102,7 @@ export function createIMRuntime(gateway) {
           agentId: inbound.agentId,
           im: {
             source: "im",
+            conversationId: conversation.id,
             channelId: inbound.channelId,
             messageId: inbound.messageId,
             chatId: inbound.chatId,

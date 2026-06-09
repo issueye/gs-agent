@@ -317,30 +317,28 @@ onMounted(() => {
 <template>
   <section class="scrollbar-thin h-full overflow-y-auto px-5 py-5">
     <div class="mx-auto max-w-7xl space-y-4">
-      <section class="qq-panel-strong rounded-[8px] px-4 py-4">
-        <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--qq-text-tertiary)]">Agents</p>
-            <h2 class="mt-1 text-2xl font-semibold text-[color:var(--qq-text-primary)]">Agent 管理</h2>
-          </div>
-          <div class="grid gap-2 sm:grid-cols-3 xl:min-w-[520px]">
-            <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/55 px-3 py-2">
-              <p class="text-xs text-[color:var(--qq-text-tertiary)]">配置</p>
-              <p class="mt-1 text-xl font-semibold">{{ agentsStore.items.length }}</p>
-            </div>
-            <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/55 px-3 py-2">
-              <p class="text-xs text-[color:var(--qq-text-tertiary)]">运行</p>
-              <p class="mt-1 text-xl font-semibold">{{ activeInstances.length }}</p>
-            </div>
-            <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/55 px-3 py-2">
-              <p class="text-xs text-[color:var(--qq-text-tertiary)]">Ready</p>
-              <p class="mt-1 text-xl font-semibold">{{ readyInstances.length }}</p>
-            </div>
-          </div>
+      <header class="flex flex-col gap-3 border-b border-[color:var(--qq-border)] pb-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--qq-text-tertiary)]">Agents</p>
+          <h2 class="mt-1 text-2xl font-semibold text-[color:var(--qq-text-primary)]">Agent 管理</h2>
         </div>
-      </section>
+        <dl class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">配置</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ agentsStore.items.length }}</dd>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">运行</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ activeInstances.length }}</dd>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">Ready</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ readyInstances.length }}</dd>
+          </div>
+        </dl>
+      </header>
 
-      <section class="qq-panel rounded-[8px] px-4 py-4">
+      <section class="py-1">
         <div class="grid gap-3 xl:grid-cols-[auto_minmax(260px,1fr)_150px_auto] xl:items-center">
           <QqTabs v-model="activeTab" :tabs="tabs" />
           <QqInput v-model="query" placeholder="搜索 Agent、实例、模型或错误">
@@ -550,23 +548,23 @@ onMounted(() => {
 
     <QqModal v-model="detailOpen" description="实例启动时解析到的配置快照。" title="实例信息">
       <div v-if="selectedInstance" class="grid gap-3 text-sm">
-        <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3">
+        <div class="border-y border-[color:var(--qq-border)] py-3">
           <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Instance</p>
           <p class="mt-2 break-all text-[color:var(--qq-text-primary)]">{{ selectedInstance.id }}</p>
           <p class="mt-1 break-all text-[color:var(--qq-text-secondary)]">{{ selectedInstance.baseUrl || '无 Base URL' }}</p>
           <p class="mt-1">{{ selectedInstance.transport }}</p>
         </div>
         <div class="grid gap-3 md:grid-cols-2">
-          <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3">
+          <div class="border-y border-[color:var(--qq-border)] py-3">
             <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Agent</p>
             <p class="mt-2 break-all text-[color:var(--qq-text-primary)]">{{ agentName(selectedInstance.agentId) }}</p>
           </div>
-          <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3">
+          <div class="border-y border-[color:var(--qq-border)] py-3">
             <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Provider</p>
             <p class="mt-2 break-all text-[color:var(--qq-text-primary)]">{{ providerLabel(selectedInstance.providerId) }}</p>
           </div>
         </div>
-        <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3">
+        <div class="border-y border-[color:var(--qq-border)] py-3">
           <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Model</p>
           <p class="mt-2 break-all text-[color:var(--qq-text-primary)]">{{ selectedInstance.modelProvider || '-' }} · {{ selectedInstance.modelName || '-' }}</p>
           <p class="mt-1 break-all text-[color:var(--qq-text-secondary)]">{{ selectedInstance.modelBaseUrl || '默认 Base URL' }} · API Key {{ selectedInstance.apiKeySet ? '已传入' : '未配置' }}</p>
@@ -578,7 +576,7 @@ onMounted(() => {
     </QqModal>
 
     <QqModal v-model="deleteDialog.open" description="删除 Agent 配置不会删除历史会话。" title="删除 Agent">
-      <div class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
+      <div class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
         <p class="font-medium text-[color:var(--qq-text-primary)]">{{ deleteDialog.agent?.name || '-' }}</p>
         <p class="mt-1 break-all">ID {{ deleteDialog.agent?.id || '-' }}</p>
       </div>
@@ -592,7 +590,7 @@ onMounted(() => {
     </QqModal>
 
     <QqModal v-model="removeInstanceDialog.open" description="仅移除实例记录，不删除 Agent 配置。" title="移除实例记录">
-      <div v-if="removeInstanceDialog.instance" class="rounded-[6px] border border-[color:var(--qq-border)] bg-white/60 px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
+      <div v-if="removeInstanceDialog.instance" class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
         <p class="font-medium text-[color:var(--qq-text-primary)]">{{ removeInstanceDialog.instance.name }}</p>
         <p class="mt-1 break-all">{{ removeInstanceDialog.instance.id }}</p>
         <p class="mt-1">状态 {{ removeInstanceDialog.instance.status }}</p>

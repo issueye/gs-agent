@@ -194,23 +194,23 @@ function statusClass(status, enabled) {
     return 'bg-white/10 text-[color:var(--qq-text-tertiary)]'
   }
   if (status === 'completed') {
-    return 'bg-sky-300/15 text-sky-100'
+    return 'bg-[rgba(14,165,233,0.14)] text-sky-700'
   }
   if (status === 'error') {
-    return 'bg-rose-300/15 text-rose-100'
+    return 'bg-rose-50 text-rose-700'
   }
-  return 'bg-emerald-300/15 text-emerald-100'
+  return 'bg-[rgba(16,185,129,0.14)] text-[#047857]'
 }
 
 function runStatusClass(status) {
   if (status === 'error') {
-    return 'bg-rose-300/15 text-rose-100'
+    return 'bg-rose-50 text-rose-700'
   }
   if (status === 'completed') {
-    return 'bg-sky-300/15 text-sky-100'
+    return 'bg-[rgba(14,165,233,0.14)] text-sky-700'
   }
   if (status === 'active') {
-    return 'bg-emerald-300/15 text-emerald-100'
+    return 'bg-[rgba(16,185,129,0.14)] text-[#047857]'
   }
   return 'bg-white/10 text-[color:var(--qq-text-tertiary)]'
 }
@@ -226,11 +226,11 @@ onMounted(() => {
 <template>
   <section class="scrollbar-thin h-full overflow-y-auto px-5 py-5">
     <div class="mx-auto max-w-7xl space-y-5">
-      <section class="qq-panel-strong rounded-[8px] px-5 py-5">
+      <header class="border-b border-[color:var(--qq-border)] pb-5">
         <p class="text-xs uppercase tracking-[0.24em] text-[color:var(--qq-text-tertiary)]">Scheduled Tasks</p>
         <div class="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 class="text-3xl font-semibold text-slate-50">定时任务管理</h2>
+            <h2 class="text-3xl font-semibold text-[color:var(--qq-text-primary)]">定时任务管理</h2>
             <p class="mt-4 max-w-3xl text-sm leading-7 text-[color:var(--qq-text-secondary)]">
               网关会持久化任务计划，并按到期时间扫描执行记录。当前版本先提供计划管理、启停、执行次数和下一次运行时间。
             </p>
@@ -247,31 +247,31 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="mt-5 grid gap-3 md:grid-cols-3">
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-3">
-            <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Tasks</p>
-            <p class="mt-2 text-2xl font-semibold text-[color:var(--qq-text-primary)]">{{ scheduledTasksStore.items.length }}</p>
+        <dl class="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">Tasks</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ scheduledTasksStore.items.length }}</dd>
           </div>
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-3">
-            <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Active</p>
-            <p class="mt-2 text-2xl font-semibold text-[color:var(--qq-text-primary)]">{{ scheduledTasksStore.activeCount }}</p>
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">Active</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ scheduledTasksStore.activeCount }}</dd>
           </div>
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-3">
-            <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Paused</p>
-            <p class="mt-2 text-2xl font-semibold text-[color:var(--qq-text-primary)]">{{ scheduledTasksStore.pausedCount }}</p>
+          <div class="flex items-baseline gap-2">
+            <dt class="text-[color:var(--qq-text-tertiary)]">Paused</dt>
+            <dd class="text-lg font-semibold text-[color:var(--qq-text-primary)]">{{ scheduledTasksStore.pausedCount }}</dd>
           </div>
-        </div>
-      </section>
+        </dl>
+      </header>
 
       <QqFormSection
         eyebrow="Directory"
         title="任务列表"
         description="间隔任务使用 5m / 1h 这样的时长；每日任务使用 UTC HH:mm；一次性任务使用 RFC3339 时间。"
       >
-        <div class="grid gap-3">
+        <div class="divide-y divide-[color:var(--qq-border)] border-y border-[color:var(--qq-border)]">
           <div
             v-if="!scheduledTasksStore.items.length"
-            class="rounded-[6px] border border-dashed border-white/15 bg-[rgba(9,32,28,0.16)] px-4 py-6 text-sm text-[color:var(--qq-text-secondary)]"
+            class="px-1 py-6 text-sm text-[color:var(--qq-text-secondary)]"
           >
             当前网关还没有定时任务。创建任务后，网关会计算下一次运行时间。
           </div>
@@ -279,7 +279,7 @@ onMounted(() => {
           <div
             v-for="task in scheduledTasksStore.items"
             :key="task.id"
-            class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-4"
+            class="py-4"
           >
             <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div class="min-w-0">
@@ -390,20 +390,20 @@ onMounted(() => {
       title="执行情况"
     >
       <div v-if="runsDialog.task" class="grid gap-4">
-        <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
+        <div class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
           <p class="font-medium text-[color:var(--qq-text-primary)]">{{ runsDialog.task.name }}</p>
           <p class="mt-1 break-all">ID {{ runsDialog.task.id }}</p>
           <p class="mt-1">Agent {{ runsDialog.task.agentId ? (agentsStore.items.find((agent) => agent.id === runsDialog.task.agentId)?.name || runsDialog.task.agentId) : '-' }}</p>
           <p class="mt-1">执行次数 {{ runsDialog.task.runCount }} · 上次 {{ formatDate(runsDialog.task.lastRunAt) }}</p>
         </div>
 
-        <div v-if="scheduledTasksStore.runsLoading" class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-4 py-6 text-sm text-[color:var(--qq-text-secondary)]">
+        <div v-if="scheduledTasksStore.runsLoading" class="border-y border-[color:var(--qq-border)] py-6 text-sm text-[color:var(--qq-text-secondary)]">
           正在读取执行情况...
         </div>
 
         <div
           v-else-if="!selectedTaskRuns.length"
-          class="rounded-[6px] border border-dashed border-white/15 bg-[rgba(9,32,28,0.16)] px-4 py-6 text-sm text-[color:var(--qq-text-secondary)]"
+          class="border-y border-[color:var(--qq-border)] py-6 text-sm text-[color:var(--qq-text-secondary)]"
         >
           还没有执行记录。等待任务到期并被网关扫描后，这里会出现最近执行情况。
         </div>
@@ -412,7 +412,7 @@ onMounted(() => {
           <div
             v-for="run in selectedTaskRuns"
             :key="run.id"
-            class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3 text-sm"
+            class="border-y border-[color:var(--qq-border)] py-3 text-sm"
           >
             <div class="flex flex-wrap items-center justify-between gap-2">
               <span class="rounded-[4px] px-2 py-0.5 text-[11px]" :class="runStatusClass(run.status)">
@@ -441,7 +441,7 @@ onMounted(() => {
       description="删除后该任务计划和执行记录会从网关移除。"
       title="删除定时任务"
     >
-      <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
+      <div class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
         <p class="font-medium text-[color:var(--qq-text-primary)]">{{ deleteDialog.task?.name || '未选择任务' }}</p>
         <p class="mt-1 break-all">ID {{ deleteDialog.task?.id || '-' }}</p>
       </div>

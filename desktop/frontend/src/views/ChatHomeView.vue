@@ -75,8 +75,8 @@ async function submit() {
     />
 
     <div class="flex min-h-0 flex-1 flex-col">
-      <div class="mx-auto w-full max-w-5xl px-5 pt-2">
-        <div class="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-[color:var(--qq-border)] bg-white/68 px-4 py-3 shadow-sm">
+      <div class="mx-auto w-full max-w-5xl border-b border-[color:var(--qq-border)] px-5 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="min-w-0">
             <p class="text-xs uppercase text-[color:var(--qq-text-tertiary)]">Agent</p>
             <p class="mt-1 text-sm text-[color:var(--qq-text-secondary)]">选择本次对话使用的 Agent</p>

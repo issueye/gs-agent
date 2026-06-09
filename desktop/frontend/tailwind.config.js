@@ -4,17 +4,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: '#090c13',
-        panel: '#0f141d',
-        panelSoft: '#151b26',
-        line: '#242b38',
-        accent: '#6ee7b7',
-        accentStrong: '#34d399',
-        muted: '#94a3b8',
-        danger: '#f87171',
+        ink: '#222222',
+        panel: '#ffffff',
+        panelSoft: '#f7fafd',
+        line: '#d9e0ea',
+        accent: '#0088ff',
+        accentStrong: '#006ed0',
+        muted: '#6b7280',
+        danger: '#c92a2a',
       },
       boxShadow: {
-        shell: '0 22px 64px rgba(0, 0, 0, 0.38)',
+        shell: '0 18px 46px rgba(15, 23, 42, 0.08)',
       },
       fontFamily: {
         sans: ['"Segoe UI Variable"', '"Segoe UI"', 'system-ui', 'sans-serif'],

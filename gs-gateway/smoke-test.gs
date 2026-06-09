@@ -59,9 +59,55 @@ function main() {
     status: "done",
     result: {
       message: "ok",
+      answer: "hello gateway reply",
     },
   });
   assertOK(task.status === "done", "task should be updated");
+  let imMessages = model.im.listConversationMessages(received.conversation.id);
+  let sawIMToolMessage = false;
+  for (let message of imMessages) {
+    if (message.id === task.id + ":tool") {
+      let toolCalls = message.tool_calls || [];
+      if (toolCalls.length === 1) {
+        sawIMToolMessage = toolCalls[0].ID === task.id &&
+          toolCalls[0].Title === "网关任务" &&
+          toolCalls[0].Status === "done";
+      }
+    }
+  }
+  assertOK(sawIMToolMessage, "IM conversation history should include gateway task tool call");
+
+  let desktopConversationId = "desktop-history-" + String((new Date()).getTime());
+  let firstDesktop = model.receiveIM({
+    platform: "desktop",
+    adapter: "wails",
+    conversationId: desktopConversationId,
+    sender: "desktop-user",
+    chat: desktopConversationId,
+    text: "first desktop history message",
+  });
+  let secondDesktop = model.receiveIM({
+    platform: "desktop",
+    adapter: "wails",
+    conversationId: desktopConversationId,
+    sender: "desktop-user",
+    chat: desktopConversationId,
+    text: "second desktop history message",
+  });
+  assertOK(firstDesktop.conversation.id === desktopConversationId, "desktop IM should keep explicit conversation id");
+  assertOK(secondDesktop.conversation.id === desktopConversationId, "desktop IM should append to explicit conversation id");
+  let desktopMessages = model.im.listConversationMessages(desktopConversationId);
+  let sawFirstDesktop = false;
+  let sawSecondDesktop = false;
+  for (let message of desktopMessages) {
+    if (message.content === "first desktop history message") {
+      sawFirstDesktop = true;
+    }
+    if (message.content === "second desktop history message") {
+      sawSecondDesktop = true;
+    }
+  }
+  assertOK(sawFirstDesktop && sawSecondDesktop, "desktop history conversation should keep messages in the same conversation");
 
   let skillName = "gateway-smoke-skill";
   try {

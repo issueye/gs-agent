@@ -191,13 +191,13 @@ function agentOptions() {
 <template>
   <section class="scrollbar-thin h-full overflow-y-auto px-5 py-5">
     <div class="mx-auto max-w-5xl space-y-5">
-      <section class="qq-panel-strong rounded-[8px] px-5 py-5">
+      <header class="border-b border-[color:var(--qq-border)] pb-5">
         <p class="text-xs uppercase tracking-[0.24em] text-[color:var(--qq-text-tertiary)]">Local Settings</p>
-        <h2 class="mt-3 text-3xl font-semibold text-slate-50">桌面端配置</h2>
+        <h2 class="mt-3 text-3xl font-semibold text-[color:var(--qq-text-primary)]">桌面端配置</h2>
         <p class="mt-4 max-w-3xl text-sm leading-7 text-[color:var(--qq-text-secondary)]">
           当前只保留聊天主链路需要的本地设置。网关地址、默认 Agent 和工作目录使用 TOML 写入本机配置文件。
         </p>
-      </section>
+      </header>
 
       <QqFormSection
         eyebrow="Projects"
@@ -210,7 +210,7 @@ function agentOptions() {
               <QqSelect :model-value="form.currentProjectId" :options="projectOptions()" @update:model-value="selectProject" />
             </QqFormField>
 
-            <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.22)] p-4">
+            <div class="border-t border-[color:var(--qq-border)] pt-4">
               <div class="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <p class="text-sm font-medium text-[color:var(--qq-text-primary)]">
@@ -252,24 +252,20 @@ function agentOptions() {
           </div>
 
           <div class="grid content-start gap-3">
-            <div
-              v-if="!form.projects.length"
-              class="rounded-[6px] border border-dashed border-white/15 bg-[rgba(9,32,28,0.16)] px-4 py-6 text-sm text-[color:var(--qq-text-secondary)]"
-            >
-              还没有本地项目。你可以先保存基础配置，之后再回来补项目。
-            </div>
+            <div class="divide-y divide-[color:var(--qq-border)] border-y border-[color:var(--qq-border)]">
+              <div
+                v-if="!form.projects.length"
+                class="px-1 py-6 text-sm text-[color:var(--qq-text-secondary)]"
+              >
+                还没有本地项目。你可以先保存基础配置，之后再回来补项目。
+              </div>
 
-            <div
-              v-for="project in form.projects"
-              :key="project.id"
-              class="rounded-[6px] border px-4 py-3 transition"
-              :class="
-                form.currentProjectId === project.id
-                  ? 'border-[rgba(75,239,201,0.48)] bg-[rgba(31,82,69,0.50)]'
-                  : 'border-white/10 bg-[rgba(9,32,28,0.18)]'
-              "
-            >
-              <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div
+                v-for="project in form.projects"
+                :key="project.id"
+                class="py-3 transition"
+              >
+                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div class="min-w-0">
                   <div class="flex min-w-0 flex-wrap items-center gap-2">
                     <p class="truncate text-sm font-semibold text-[color:var(--qq-text-primary)]">{{ project.name }}</p>
@@ -287,6 +283,7 @@ function agentOptions() {
                   </QqButton>
                 </div>
               </div>
+            </div>
             </div>
           </div>
         </div>
@@ -340,12 +337,12 @@ function agentOptions() {
       </div>
 
       <QqFormSection eyebrow="Runtime" title="运行信息" description="用于确认当前本地配置路径和运行时环境。">
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.22)] px-4 py-3 text-sm text-[color:var(--qq-text-secondary)]">
+        <div class="grid gap-4 border-y border-[color:var(--qq-border)] py-4 md:grid-cols-2">
+          <div class="text-sm text-[color:var(--qq-text-secondary)]">
             <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Config Path</p>
             <p class="mt-2 break-all">{{ settingsStore.path || '未加载' }}</p>
           </div>
-          <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.22)] px-4 py-3 text-sm text-[color:var(--qq-text-secondary)]">
+          <div class="text-sm text-[color:var(--qq-text-secondary)]">
             <p class="text-xs uppercase tracking-[0.16em] text-[color:var(--qq-text-tertiary)]">Runtime</p>
             <p class="mt-2 break-all">
               {{ appStore.appInfo?.name || 'Icoo Claw' }} {{ appStore.appInfo?.version || '' }}
@@ -380,7 +377,7 @@ function agentOptions() {
         description="删除项目只会移除桌面端本地配置，不会删除磁盘上的文件。"
         title="删除项目"
       >
-        <div class="rounded-[6px] border border-white/10 bg-[rgba(9,32,28,0.18)] px-3 py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
+        <div class="border-y border-[color:var(--qq-border)] py-3 text-sm leading-6 text-[color:var(--qq-text-secondary)]">
           <p class="font-medium text-[color:var(--qq-text-primary)]">{{ deleteProjectDialog.project?.name || '未选择项目' }}</p>
           <p class="mt-1 break-all">{{ deleteProjectDialog.project?.rootDir || '-' }}</p>
         </div>
