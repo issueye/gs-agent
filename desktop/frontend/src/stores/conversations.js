@@ -119,6 +119,35 @@ export const useConversationsStore = defineStore('conversations', {
       this.bumpConversation(conversationId)
     },
 
+    mergeAssistantAnswer(conversationId, answer) {
+      const text = String(answer || '')
+      if (!text) {
+        return
+      }
+      const messages = this.ensureMessageBuffer(conversationId)
+      let draft = findTextAssistantDraft(messages)
+      if (!draft) {
+        const existing = [...messages].reverse().find((item) => (
+          item.role === 'assistant' &&
+          !item.metadata?.toolCallId &&
+          String(item.content || '').trim() === text.trim()
+        ))
+        if (existing) {
+          return
+        }
+        draft = buildLocalMessage('assistant', '', { draft: true })
+        messages.push(draft)
+      }
+
+      const current = String(draft.content || '')
+      if (current.trim() === text.trim() || text.startsWith(current)) {
+        draft.content = text
+      } else if (!current.endsWith(text)) {
+        draft.content += text
+      }
+      this.bumpConversation(conversationId)
+    },
+
     appendAssistantUpdate(conversationId, update) {
       if (isToolUpdate(update)) {
         this.upsertToolMessage(conversationId, update)

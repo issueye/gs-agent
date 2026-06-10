@@ -42,7 +42,7 @@ function isVisibleMessage(message) {
 
 <template>
   <div ref="viewport" class="scrollbar-thin h-full overflow-y-auto">
-    <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-5 py-6">
+    <div class="mx-auto flex w-full max-w-5xl flex-col gap-2 px-5 py-4">
       <ChatMessageItem
         v-for="message in visibleMessages"
         :key="message.id"

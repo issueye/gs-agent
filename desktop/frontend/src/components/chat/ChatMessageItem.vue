@@ -130,7 +130,11 @@ function compactToolSummary(meta = {}) {
     :data-testid="`chat-message-${message.role}`"
   >
     <div class="message-shell" :class="messageShellClass">
-      <header class="mb-2 flex items-center gap-2" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
+      <header
+        v-if="!isToolMessage"
+        class="mb-1 flex items-center gap-2"
+        :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
+      >
         <span
           class="inline-flex rounded-lg px-2 py-0.5 text-[11px] uppercase"
           :class="
@@ -157,12 +161,12 @@ function compactToolSummary(meta = {}) {
       </header>
 
       <div
-        class="border px-3 py-2.5 shadow-sm"
+        class="border px-3 py-2"
         :class="[
           message.role === 'user' ? 'border-transparent bg-[color:var(--qq-user-bubble)]' : 'border-[color:var(--qq-border)] bg-white/82',
           isToolMessage ? 'border-[rgba(0,136,255,0.22)] bg-[rgba(237,243,255,0.72)]' : '',
         ]"
-        style="border-radius: 16px;"
+        style="border-radius: 10px;"
       >
         <button
           v-if="isToolMessage"
@@ -179,6 +183,9 @@ function compactToolSummary(meta = {}) {
           </span>
           <span v-if="toolSummary" class="hidden min-w-0 flex-1 truncate sm:inline">{{ toolSummary }}</span>
           <span v-if="toolMetadata.toolStatus" class="shrink-0">· {{ toolStatusLabel(toolMetadata.toolStatus) }}</span>
+          <time v-if="showTimestamps" class="shrink-0 text-[11px] text-[color:var(--qq-text-tertiary)]">
+            {{ formatTimestamp(message.createdAt) }}
+          </time>
           <span class="tool-message-toggle__label inline-flex shrink-0 items-center gap-1">
             <component :is="toolExpanded ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
             {{ toolToggleLabel }}
@@ -208,15 +215,15 @@ function compactToolSummary(meta = {}) {
 }
 
 .message-shell {
-  max-width: min(920px, 82%);
+  max-width: min(920px, 84%);
 }
 
 .message-shell--user {
-  max-width: min(720px, 70%);
+  max-width: min(720px, 72%);
 }
 
 .message-shell--tool {
-  max-width: min(980px, 86%);
+  max-width: min(760px, 80%);
 }
 
 .tool-message-toggle {

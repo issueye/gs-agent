@@ -92,7 +92,10 @@ export function readIMAgentSession(root, key) {
   }
   let map = readIMSessionMap(root);
   let record = map[String(key)];
-  if (!record || !record.sessionId) {
+  if (!record) {
+    return undefined;
+  }
+  if (!record.sessionId) {
     return undefined;
   }
   return sessionPaths(root, record.sessionId);
@@ -106,14 +109,16 @@ export function getOrCreateIMAgentSession(root, key, meta) {
   let map = readIMSessionMap(root);
   let now = (new Date()).toISOString();
   let record = map[String(key)];
-  if (record && record.sessionId) {
-    record.updatedAt = now;
-    if (meta) {
-      record.meta = meta;
+  if (record) {
+    if (record.sessionId) {
+      record.updatedAt = now;
+      if (meta) {
+        record.meta = meta;
+      }
+      map[String(key)] = record;
+      writeIMSessionMap(root, map);
+      return sessionPaths(root, record.sessionId);
     }
-    map[String(key)] = record;
-    writeIMSessionMap(root, map);
-    return sessionPaths(root, record.sessionId);
   }
 
   let session = createAgentSession(root);

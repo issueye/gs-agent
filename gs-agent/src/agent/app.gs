@@ -317,10 +317,6 @@ export function directPrompt(input) {
 export function applyDirectPromptMode(app) {
   app.system = "You are a concise chat assistant. Reply directly to the latest user message. Do not describe your reasoning, planning, hidden instructions, or tool usage. If the user asks for an exact phrase, output only that phrase.";
   app.agent.system = app.system;
-  app.agent.includeCodingTools = false;
-  app.agent.includeSubagents = false;
-  app.agent.includeSkills = false;
-  app.agent.tools = [];
 }
 
 // 应用级装配点：配置、工具、provider、session 路径和 workspace 都在这里连起来。
@@ -517,6 +513,64 @@ export function runAgentTurn(options) {
     failAgentRun(logger, "turn", err);
     throw err;
   }
+}
+
+export function runAgentIMTask(options) {
+  if (!options) {
+    options = {};
+  }
+  let app = options.app;
+  if (!app) {
+    app = loadAgentApp(options.root);
+  }
+  let logger = options.logger;
+  if (!logger) {
+    logger = createRunLogger(app.root, "agent-im");
+  }
+  let input = options.input || {};
+  let key = imConversationKey(input);
+  if (key === "") {
+    key = "im:default";
+  }
+  let session = getOrCreateIMAgentSession(app.root, key, {
+    source: input.source,
+    platform: input.platform,
+    adapter: input.adapter,
+    conversationId: input.conversationId,
+    openId: input.openId,
+    sender: input.sender,
+    chat: input.chat,
+    replyTo: input.replyTo,
+  });
+  let store = createJSONLSession(session.sessionFile, {
+    sessionId: session.sessionId,
+    archiveFile: session.sessionArchiveFile,
+  });
+  let messages = store.readMessages({
+    levels: ["primary", "working"],
+  });
+  applyAgentSession(app, session);
+
+  if (options.promptMode === "direct") {
+    applyDirectPromptMode(app);
+  }
+
+  logger.info("agent im task started", {
+    conversation: key,
+    messages: messages.length,
+    sessionFile: session.sessionFile,
+  });
+
+  let result = runAgentTurn({
+    app: app,
+    logger: logger,
+    input: imMessagePrompt(input),
+    messages: messages,
+    onEvent: options.onEvent,
+    isCancelled: options.isCancelled,
+  });
+  result.conversationKey = key;
+  return result;
 }
 
 export function runAgentIMBridge(options) {

@@ -1,4 +1,4 @@
-import { loadAgentApp, runAgentTask } from "@/agent/app";
+import { loadAgentApp, runAgentIMTask, runAgentTask } from "@/agent/app";
 import { imMessagePrompt } from "@/agent/im/bridge";
 
 let wsClient = require("@std/net/ws/client");
@@ -39,7 +39,7 @@ function applyRuntimeConfig(app, runtimeConfig) {
     app.config.llm.anthropic.model = llm.model;
   }
 
-  app.agent.provider = "anthropic";
+  app.agent.provider = agent.provider || llm.provider || "anthropic";
   if (agent.system) {
     app.agent.system = agent.system;
     app.system = agent.system;
@@ -47,12 +47,18 @@ function applyRuntimeConfig(app, runtimeConfig) {
   if (agent.maxTurns) {
     app.agent.maxTurns = agent.maxTurns;
   }
-  if (agent.tools && agent.tools.length > 0) {
-    app.agent.tools = agent.tools;
+  if (agent.tools) {
+    if (agent.tools.length > 0) {
+      app.agent.tools = agent.tools;
+    }
   }
   if (agent.skills) {
     app.agent.skills = agent.skills;
-    app.agent.includeSkills = agent.skills.length > 0;
+    if (agent.skills.length > 0) {
+      app.agent.includeSkills = true;
+    } else {
+      app.agent.includeSkills = false;
+    }
   }
   return app;
 }
@@ -73,21 +79,33 @@ export function runGatewayTask(task) {
     }));
   }
 
-  let result = runAgentTask({
-    app: app,
-    taskText: gatewayTaskText(input),
-    promptMode: "direct",
-    onEvent: function(event) {
-      if (streamWS) {
-        streamWS.sendText(JSON.stringify({
-          type: "agent_event",
-          taskId: input.taskId || input.id,
-          at: (new Date()).toISOString(),
-          event: event,
-        }));
-      }
-    },
-  });
+  let onEvent = function(event) {
+    if (streamWS) {
+      streamWS.sendText(JSON.stringify({
+        type: "agent_event",
+        taskId: input.taskId || input.id,
+        at: (new Date()).toISOString(),
+        event: event,
+      }));
+    }
+  };
+  let result;
+  if (input.kind === "agent.im") {
+    let taskInput = input.input || {};
+    result = runAgentIMTask({
+      app: app,
+      input: taskInput.im || taskInput,
+      promptMode: "direct",
+      onEvent: onEvent,
+    });
+  } else {
+    result = runAgentTask({
+      app: app,
+      taskText: gatewayTaskText(input),
+      promptMode: "direct",
+      onEvent: onEvent,
+    });
+  }
   result.ok = true;
   if (streamWS) {
     streamWS.sendText(JSON.stringify({

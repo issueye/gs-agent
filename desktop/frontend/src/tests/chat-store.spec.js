@@ -75,6 +75,35 @@ describe('chat store', () => {
     expect(conversationsStore.messagesFor('conv_b').at(-1).content).toBe('beta')
   })
 
+  it('merges a final answer into an existing partial draft without duplicating text', async () => {
+    const chatStore = useChatStore()
+    const conversationsStore = useConversationsStore()
+
+    conversationsStore.items = [{ id: 'conv_a', title: 'A' }]
+    conversationsStore.startAssistantDraft('conv_a')
+
+    await chatStore.handleSocketMessage({ type: 'session/update', update: textUpdate('Hello') }, 'conv_a')
+    await chatStore.handleSocketMessage({ type: 'agent_result', result: { answer: 'Hello world' } }, 'conv_a')
+    await chatStore.handleSocketMessage({ type: 'done', answer: 'Hello world', task: { id: 'task_1', kind: 'agent.im' } }, 'conv_a')
+
+    const textMessages = conversationsStore.messagesFor('conv_a').filter((message) => message.role === 'assistant' && !message.metadata.toolCallId)
+    expect(textMessages).toHaveLength(1)
+    expect(textMessages[0].content).toBe('Hello world')
+  })
+
+  it('ignores raw text_delta agent events because normalized session updates carry the text', async () => {
+    const chatStore = useChatStore()
+    const conversationsStore = useConversationsStore()
+
+    conversationsStore.items = [{ id: 'conv_a', title: 'A' }]
+    conversationsStore.startAssistantDraft('conv_a')
+
+    await chatStore.handleSocketMessage({ type: 'session/update', update: textUpdate('Hello') }, 'conv_a')
+    await chatStore.handleSocketMessage({ type: 'agent_event', event: { kind: 'text_delta', payload: { text: 'Hello' } } }, 'conv_a')
+
+    expect(conversationsStore.messagesFor('conv_a').at(-1).content).toBe('Hello')
+  })
+
   it('tracks running conversation status from session events', async () => {
     const chatStore = useChatStore()
     const conversationsStore = useConversationsStore()

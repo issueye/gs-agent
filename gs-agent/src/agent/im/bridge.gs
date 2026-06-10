@@ -61,6 +61,8 @@ export function imConversationKey(input) {
     return "";
   }
   let identity = firstString([
+    input.conversationId,
+    input.conversation_id,
     input.openId,
     input.sender,
     input.replyTo,
@@ -152,11 +154,18 @@ export function normalizeIMMessage(event) {
     chat,
     sender,
   ]);
+  let conversationId = firstString([
+    field(data, "conversationId"),
+    field(data, "conversation_id"),
+    field(data, "sessionId"),
+    chat,
+  ]);
 
   return {
     source: "im",
     adapter: adapter,
     platform: platform,
+    conversationId: conversationId,
     openId: openId,
     sender: sender,
     chat: chat,

@@ -205,28 +205,19 @@ export const useChatStore = defineStore('chat', {
           if (message.task?.id) {
             this.lastSessionId = message.task.id
             this.updateStream(conversationId, { sessionId: message.task.id })
-            conversationsStore.appendAssistantUpdate(conversationId, {
-              sessionUpdate: 'tool_call',
-              toolCallId: message.task.id,
-              title: '网关任务',
-              kind: 'agent.im',
-              status: 'running',
-            })
           }
           break
         case 'agent_event':
           this.applyGatewayAgentEvent(conversationId, message)
           break
         case 'agent_result':
-          if (message.result?.answer && !conversationHasAssistantText(conversationsStore.messagesFor(conversationId), message.result.answer)) {
-            conversationsStore.appendAssistantDelta(conversationId, message.result.answer)
+          if (message.result?.answer) {
+            conversationsStore.mergeAssistantAnswer(conversationId, message.result.answer)
           }
           break
         case 'done':
           if (message.answer) {
-            if (!conversationHasAssistantText(conversationsStore.messagesFor(conversationId), message.answer)) {
-              conversationsStore.appendAssistantDelta(conversationId, message.answer)
-            }
+            conversationsStore.mergeAssistantAnswer(conversationId, message.answer)
           }
           conversationsStore.upsertToolMessage(conversationId, {
             sessionUpdate: 'tool_call_update',
@@ -268,7 +259,7 @@ export const useChatStore = defineStore('chat', {
       const payload = event.payload || {}
       const taskId = message.taskId || event.taskId || this.streamsByConversationId[conversationId]?.sessionId || ''
       if (kind === 'text_delta') {
-        conversationsStore.appendAssistantDelta(conversationId, payload.text || '')
+        // The gateway also forwards text_delta as a normalized session/update frame.
         return
       }
       if (kind === 'tool_call') {
@@ -353,14 +344,6 @@ export const useChatStore = defineStore('chat', {
 
 function buildRequestID() {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
-
-function conversationHasAssistantText(messages, text) {
-  const normalized = String(text || '').trim()
-  if (!normalized) {
-    return false
-  }
-  return messages.some((item) => item.role === 'assistant' && String(item.content || '').trim() === normalized)
 }
 
 function toolKind(name) {
