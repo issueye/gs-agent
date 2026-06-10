@@ -8,3 +8,4 @@ dist/
 *.exe
 .gateway/
 agent.local.toml
+docs/*

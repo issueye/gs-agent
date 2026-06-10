@@ -1,0 +1,26 @@
+# .distignore - 打包时忽略的文件
+
+# 源码目录
+src/
+
+# 开发文件
+*.local.toml
+*.example.toml
+
+# 临时文件
+.agent/
+.claude/
+build/
+dist/
+docs/
+
+# 测试文件
+*-test.gs
+*smoke*.gs
+
+# 日志
+*.log
+
+# Git
+.git/
+.gitignore

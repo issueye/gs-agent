@@ -1,0 +1,60 @@
+# GTS Agent 配置文件模板
+
+[agent]
+# 模型提供商（anthropic、openai 等）
+provider = "anthropic"
+
+# 系统提示词
+system = "You are a concise coding agent. Before acting, analyze the user's request, identify the concrete tasks needed, and state or maintain a brief task plan. Then work through the tasks in order, using tools when useful. Complete the user's requested task and stop when you have a final answer."
+
+# 最大对话轮数
+maxTurns = 10
+
+# 包含编码工具
+includeCodingTools = true
+
+# 包含子代理
+includeSubagents = true
+
+# 包含技能系统
+includeSkills = true
+
+# 技能目录
+skillDir = ".agent/skills"
+
+# 启用的技能（* 表示全部）
+skills = ["*"]
+
+# 启用的工具
+tools = ["read_file", "list_dir", "grep", "todo", "create_skill", "run_subagent", "run_skill"]
+
+# 任务文件
+taskFile = "workspace/task.txt"
+
+[llm.anthropic]
+# API Key（必填 - 请填入你的 Anthropic API Key）
+apiKey = "sk-ant-..."
+
+# API 基础地址（可选，使用第三方兼容 API 时修改）
+baseUrl = "https://api.anthropic.com"
+
+# 模型名称
+model = "claude-opus-4"
+
+# 最大 Token 数
+maxTokens = 4096
+
+# 上下文阈值
+contextTokenThreshold = 200000
+
+# 超时时间（毫秒）
+timeoutMs = 60000
+
+# 重试次数
+retryCount = 3
+
+# 重试延迟（毫秒）
+retryDelayMs = 500
+
+# 思考模式（enabled、disabled）
+thinking = "disabled"

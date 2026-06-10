@@ -1,0 +1,22 @@
+# GTS Gateway 配置文件模板
+
+[gateway]
+# 监听端口
+port = 18878
+
+# 数据目录
+dataDir = ".gateway"
+
+# 数据库文件
+database = ".gateway/gateway.db"
+
+# Agent 根目录
+agentRoot = "./gs-agent"
+
+[im]
+# 启用 IM 功能
+enabled = true
+
+[scheduler]
+# 启用调度器
+enabled = true
