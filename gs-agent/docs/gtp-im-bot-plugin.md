@@ -1,5 +1,7 @@
 # GTP IM 机器人插件
 
+> 迁移说明：`gs-agent` 不再启动或管理 IM 插件。本页仅保留历史插件接口说明；IM 插件生命周期、入站归一化和出站回复应由 `gs-gateway` 承担。
+
 `cmd/gtp-imbot` 是一个独立 GTP 插件，模块名为 `@plugin/im-bot`。它不依赖 `cc-connect` 运行，而是参考各 IM 平台的接入方式，按当前项目的 GTP 插件机制封装成统一脚本 API。
 
 ## 支持的适配器

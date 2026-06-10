@@ -24,10 +24,6 @@ export function currentSessionFile(root) {
   return path.join(root, ".agent", "current-session.json");
 }
 
-export function imSessionMapFile(root) {
-  return path.join(root, ".agent", "im-sessions.json");
-}
-
 export function sessionPaths(root, id) {
   let dir = sessionRoot(root, id);
   return {
@@ -37,6 +33,37 @@ export function sessionPaths(root, id) {
     sessionArchiveFile: sessionArchiveFile(root),
     answerFile: path.join(dir, "answer.md"),
   };
+}
+
+export function resolveAgentSession(root, value) {
+  let text = String(value || "").trim();
+  if (text === "") {
+    return undefined;
+  }
+
+  if (text === "current" || text === "latest") {
+    return readCurrentAgentSession(root);
+  }
+
+  if (fs.existsSync(text)) {
+    let info = fs.statSync(text);
+    let sessionDir = text;
+    let sessionFile = path.join(text, "session.jsonl");
+    if (!info.isDirectory()) {
+      sessionFile = text;
+      sessionDir = path.dirname(text);
+    }
+    let id = path.basename(sessionDir);
+    return {
+      sessionId: id,
+      sessionDir: sessionDir,
+      sessionFile: sessionFile,
+      sessionArchiveFile: sessionArchiveFile(root),
+      answerFile: path.join(sessionDir, "answer.md"),
+    };
+  }
+
+  return sessionPaths(root, text);
 }
 
 export function createAgentSession(root) {
@@ -66,69 +93,4 @@ export function writeCurrentAgentSession(root, session) {
     answerFile: session.answerFile,
     updatedAt: (new Date()).toISOString(),
   }, null, 2) + "\n");
-}
-
-function readIMSessionMap(root) {
-  let file = imSessionMapFile(root);
-  if (!fs.existsSync(file)) {
-    return {};
-  }
-  let map = JSON.parse(fs.readFileSync(file));
-  if (!map || typeof map !== "OBJECT") {
-    return {};
-  }
-  return map;
-}
-
-function writeIMSessionMap(root, map) {
-  let file = imSessionMapFile(root);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeTextSync(file, JSON.stringify(map, null, 2) + "\n");
-}
-
-export function readIMAgentSession(root, key) {
-  if (!key) {
-    return undefined;
-  }
-  let map = readIMSessionMap(root);
-  let record = map[String(key)];
-  if (!record) {
-    return undefined;
-  }
-  if (!record.sessionId) {
-    return undefined;
-  }
-  return sessionPaths(root, record.sessionId);
-}
-
-export function getOrCreateIMAgentSession(root, key, meta) {
-  if (!key) {
-    return createAgentSession(root);
-  }
-
-  let map = readIMSessionMap(root);
-  let now = (new Date()).toISOString();
-  let record = map[String(key)];
-  if (record) {
-    if (record.sessionId) {
-      record.updatedAt = now;
-      if (meta) {
-        record.meta = meta;
-      }
-      map[String(key)] = record;
-      writeIMSessionMap(root, map);
-      return sessionPaths(root, record.sessionId);
-    }
-  }
-
-  let session = createAgentSession(root);
-  map[String(key)] = {
-    key: String(key),
-    sessionId: session.sessionId,
-    meta: meta || {},
-    createdAt: now,
-    updatedAt: now,
-  };
-  writeIMSessionMap(root, map);
-  return session;
 }

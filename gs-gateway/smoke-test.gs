@@ -1,6 +1,7 @@
 import { loadConfig } from "@/config";
 import { openGatewayStore } from "@/models/store";
 import { createGatewayModel } from "@/models/gateway";
+import { buildAgentTaskPayloadForGateway, buildGatewayIMReply } from "@/models/agent_bridge";
 
 function assertOK(value, message) {
   if (!value) {
@@ -50,6 +51,15 @@ function main() {
   assertOK(received.task.payload.input.im.adapter === "qq-local", "IM task should keep adapter");
   assertOK(received.task.payload.input.im.chat === "smoke-chat", "IM task should keep chat");
   assertOK(received.task.payload.input.im.sender === "smoke-user", "IM task should keep sender");
+  let bridgePayload = buildAgentTaskPayloadForGateway(model, received.task);
+  assertOK(bridgePayload.input.text.indexOf("IM message received through gateway.") >= 0, "gateway should convert IM input into agent prompt");
+  assertOK(bridgePayload.input.text.indexOf("hello gateway") >= 0, "gateway IM prompt should include original text");
+  assertOK(bridgePayload.run.sessionId === received.conversation.id, "gateway should map IM conversation to agent session id");
+  let replyInput = buildGatewayIMReply(received.task, {
+    answer: "hello gateway reply",
+  });
+  assertOK(replyInput.conversationId === received.conversation.id, "gateway reply should keep conversation id");
+  assertOK(replyInput.text === "hello gateway reply", "gateway reply should use agent answer");
   let conversations = model.im.listConversations({
     channelId: received.channel.id,
   });

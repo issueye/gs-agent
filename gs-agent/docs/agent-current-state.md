@@ -3,11 +3,13 @@
 > Updated: 2026-06-08.
 
 `gs-agent` is a GoScript application that runs an AI coding agent on top of the GoScript runtime.
-It has three entry modes:
+It has two entry modes:
 
 - `run`: read `workspace/task.txt`, run one agent task, write session and answer files.
 - `--tui`: run the terminal UI for interactive task editing and session viewing.
-- `--im`: attach the IM plugin bridge and process inbound IM messages as agent inputs.
+
+IM inbound handling, conversation mapping, and outbound reply lifecycle live in `gs-gateway`.
+`gs-agent` receives gateway task payloads through `gateway-task.gs` and stays focused on model execution.
 
 ## Runtime Composition
 

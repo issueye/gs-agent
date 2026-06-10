@@ -117,7 +117,7 @@ Move these responsibilities from `gs-agent` to `gs-gateway`:
 - Plugin registration and health checks.
 - Dynamic tool registry management.
 
-After this phase, `gs-agent --im` should be deprecated or become a thin compatibility wrapper.
+After this phase, `gs-agent --im` is removed. IM ingress, conversation mapping, and pending replies are owned by `gs-gateway`.
 
 ## Phase 4: Session and Audit Center
 

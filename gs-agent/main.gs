@@ -1,27 +1,21 @@
-import { runAgentApp, runAgentIMBridge } from "@/agent/app";
+import { runAgentApp } from "@/agent/app";
 
 let cli = require("@std/cli");
-let timers = require("@std/timers");
 
 function runMain(cmd, args) {
+  let session = cmd.flag("session");
   if (cmd.flag("tui")) {
     let tui = require("@/tui/app");
     let runAgentTui = tui.runAgentTui;
-    runAgentTui();
+    runAgentTui({
+      session: session,
+    });
     return;
   }
 
-  if (cmd.flag("im")) {
-    let bridge = runAgentIMBridge({});
-    println("im bridge started");
-    println("events=" + bridge.events.join(","));
-    println("session=" + bridge.app.sessionFile);
-    while (true) {
-      timers.sleep(1000);
-    }
-  }
-
-  let result = runAgentApp();
+  let result = runAgentApp({
+    session: session,
+  });
 
   println(result.answer);
   println("events=" + String(result.events));
@@ -39,6 +33,6 @@ function main() {
     run: runMain,
   });
   root.flags().bool("tui", "", false, "run the terminal UI");
-  root.flags().bool("im", "", false, "run the IM bridge");
+  root.flags().string("session", "s", "", "continue a session by id, directory, session.jsonl path, or current");
   root.execute();
 }

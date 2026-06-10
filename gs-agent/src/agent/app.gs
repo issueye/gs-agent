@@ -1,11 +1,8 @@
 import { createCodingAgent } from "@/agent/core/kit";
 import { createProvider } from "@/agent/llm/providers";
 import { createRunLogger, eventLogFields, logPaths } from "@/agent/log";
-import { createAgentSession, getOrCreateIMAgentSession, readCurrentAgentSession, writeCurrentAgentSession } from "@/agent/session/manager";
-import { createJSONLSession } from "@/agent/session/jsonl";
+import { createAgentSession, readCurrentAgentSession, resolveAgentSession, writeCurrentAgentSession } from "@/agent/session/manager";
 import { applySkillsToSystem, discoverSkills } from "@/agent/skills/loader";
-import { createEventBus } from "@/agent/events/bus";
-import { attachIMBotToBus, imConversationKey, imMessagePrompt, sendIMReply } from "@/agent/im/bridge";
 import { createRunSkillTool } from "@/agent/tools/skill-runner";
 import { createRunSubagentTool } from "@/agent/tools/subagent";
 import { createWorkspaceTools } from "@/agent/tools/workspace";
@@ -152,26 +149,6 @@ function contextTokenThreshold(config, agent) {
   return undefined;
 }
 
-function imPluginConfig(app) {
-  if (!app || !app.config || !app.config.im) {
-    return {};
-  }
-  if (!app.config.im.plugin) {
-    return {};
-  }
-  return app.config.im.plugin;
-}
-
-function requireIMPlugin(app) {
-  try {
-    return require("@plugin/im-bot");
-  } catch (err) {
-    let cfg = imPluginConfig(app);
-    let command = cfg.command || ".agent/plugins/im-bot/gtp-imbot.exe";
-    throw new ReferenceError("IM bot plugin is not registered. Configure [im.plugin] in agent.toml and ensure the runtime starts " + command + " as @plugin/im-bot. Original error: " + String(err));
-  }
-}
-
 export function applyAgentSession(app, session) {
   app.sessionId = session.sessionId;
   app.sessionDir = session.sessionDir;
@@ -194,6 +171,16 @@ export function loadCurrentAgentSession(app) {
     return undefined;
   }
   applyAgentSession(app, session);
+  return session;
+}
+
+export function loadNamedAgentSession(app, value) {
+  let session = resolveAgentSession(app.root, value);
+  if (!session) {
+    return undefined;
+  }
+  applyAgentSession(app, session);
+  writeCurrentAgentSession(app.root, session);
   return session;
 }
 
@@ -320,9 +307,12 @@ export function applyDirectPromptMode(app) {
 }
 
 // 应用级装配点：配置、工具、provider、session 路径和 workspace 都在这里连起来。
-export function loadAgentApp(root) {
+export function loadAgentApp(root, options) {
   if (!root) {
     root = defaultAppRoot();
+  }
+  if (!options) {
+    options = {};
   }
 
   let config = readConfig(root);
@@ -330,7 +320,13 @@ export function loadAgentApp(root) {
   let skills = discoverSkills(root, agent);
   let system = applySkillsToSystem(agent.system, skills);
   let workspace = path.join(root, "workspace");
-  let session = readCurrentAgentSession(root);
+  let session = undefined;
+  if (options.session) {
+    session = resolveAgentSession(root, options.session);
+  }
+  if (!session) {
+    session = readCurrentAgentSession(root);
+  }
   if (!session) {
     session = createAgentSession(root);
   }
@@ -445,7 +441,15 @@ export function runAgentTask(options) {
     logger = createRunLogger(app.root, "agent");
   }
 
-  startAgentSession(app);
+  if (options.session) {
+    loadNamedAgentSession(app, options.session);
+  } else if (options.resumeSession) {
+    if (!app.sessionId || !app.sessionFile) {
+      loadCurrentAgentSession(app);
+    }
+  } else {
+    startAgentSession(app);
+  }
   logAgentRunStarted(app, logger, "run", {
     taskFile: app.taskFile,
   });
@@ -462,7 +466,13 @@ export function runAgentTask(options) {
     if (options.promptMode === "direct") {
       prompt = directPrompt(options.taskText);
     }
-    let answer = kit.agent.run(prompt);
+    let messages = [];
+    if (options.resumeSession) {
+      messages = kit.session.readMessages({
+        levels: ["primary", "working"],
+      });
+    }
+    let answer = kit.agent.runMessages(messages, prompt);
     return finishAgentRun(app, logger, "run", kit, answer);
   } catch (err) {
     failAgentRun(logger, "run", err);
@@ -515,178 +525,17 @@ export function runAgentTurn(options) {
   }
 }
 
-export function runAgentIMTask(options) {
+export function runAgentApp(options) {
   if (!options) {
     options = {};
   }
-  let app = options.app;
-  if (!app) {
-    app = loadAgentApp(options.root);
-  }
-  let logger = options.logger;
-  if (!logger) {
-    logger = createRunLogger(app.root, "agent-im");
-  }
-  let input = options.input || {};
-  let key = imConversationKey(input);
-  if (key === "") {
-    key = "im:default";
-  }
-  let session = getOrCreateIMAgentSession(app.root, key, {
-    source: input.source,
-    platform: input.platform,
-    adapter: input.adapter,
-    conversationId: input.conversationId,
-    openId: input.openId,
-    sender: input.sender,
-    chat: input.chat,
-    replyTo: input.replyTo,
+  let app = loadAgentApp(options.root, {
+    session: options.session,
   });
-  let store = createJSONLSession(session.sessionFile, {
-    sessionId: session.sessionId,
-    archiveFile: session.sessionArchiveFile,
-  });
-  let messages = store.readMessages({
-    levels: ["primary", "working"],
-  });
-  applyAgentSession(app, session);
-
-  if (options.promptMode === "direct") {
-    applyDirectPromptMode(app);
-  }
-
-  logger.info("agent im task started", {
-    conversation: key,
-    messages: messages.length,
-    sessionFile: session.sessionFile,
-  });
-
-  let result = runAgentTurn({
-    app: app,
-    logger: logger,
-    input: imMessagePrompt(input),
-    messages: messages,
-    onEvent: options.onEvent,
-    isCancelled: options.isCancelled,
-  });
-  result.conversationKey = key;
-  return result;
-}
-
-export function runAgentIMBridge(options) {
-  if (!options) {
-    options = {};
-  }
-  let app = options.app;
-  if (!app) {
-    app = loadAgentApp(options.root);
-  }
-  let logger = options.logger;
-  if (!logger) {
-    logger = createRunLogger(app.root, "agent-im");
-  }
-  let bus = options.bus;
-  if (!bus) {
-    bus = createEventBus();
-  }
-  let plugin = options.plugin;
-  if (!plugin && options.requirePlugin !== false) {
-    plugin = requireIMPlugin(app);
-  }
-  let conversations = {};
-
-  function conversationFor(input) {
-    let key = imConversationKey(input);
-    if (key === "") {
-      key = "im:default";
-    }
-    if (conversations[key]) {
-      return conversations[key];
-    }
-
-    let session = getOrCreateIMAgentSession(app.root, key, {
-      source: input.source,
-      platform: input.platform,
-      adapter: input.adapter,
-      openId: input.openId,
-      sender: input.sender,
-      chat: input.chat,
-      replyTo: input.replyTo,
-    });
-    let store = createJSONLSession(session.sessionFile, {
-      sessionId: session.sessionId,
-      archiveFile: session.sessionArchiveFile,
-    });
-    let messages = store.readMessages({
-      levels: ["primary", "working"],
-    });
-    conversations[key] = {
-      key: key,
-      session: session,
-      messages: messages,
-    };
-    return conversations[key];
-  }
-
-  bus.on("agent_input", function(input) {
-    let conversation = conversationFor(input);
-    applyAgentSession(app, conversation.session);
-    logger.info("agent input event", {
-      source: input.source,
-      platform: input.platform,
-      adapter: input.adapter,
-      openId: input.openId,
-      sender: input.sender,
-      chat: input.chat,
-      conversation: conversation.key,
-      sessionFile: conversation.session.sessionFile,
-    });
-    let result = runAgentTurn({
-      app: app,
-      logger: logger,
-      input: imMessagePrompt(input),
-      messages: conversation.messages,
-      onEvent: options.onEvent,
-      isCancelled: options.isCancelled,
-    });
-    conversation.messages = result.messages;
-    if (options.autoReply !== false && plugin) {
-      sendIMReply(plugin, input, result.answer);
-    }
-    if (options.onAnswer) {
-      options.onAnswer({
-        input: input,
-        answer: result.answer,
-        result: result,
-      });
-    }
-  });
-
-  let attachment = attachIMBotToBus(bus, {
-    plugin: plugin,
-    events: options.events || imPluginConfig(app).events,
-    requirePlugin: options.requirePlugin,
-  });
-  logger.info("agent IM bridge started", {
-    attached: attachment.attached,
-    events: attachment.events.join(","),
-  });
-
-  return {
-    app: app,
-    bus: bus,
-    plugin: plugin,
-    conversations: conversations,
-    attached: attachment.attached,
-    events: attachment.events,
-  };
-}
-
-// 保持现有命令行入口行为不变。
-export function runAgentApp() {
-  let app = loadAgentApp();
   return runAgentTask({
     app: app,
     taskText: readTaskText(app.root, app.taskFile),
+    session: options.session,
+    resumeSession: !!options.session,
   });
 }

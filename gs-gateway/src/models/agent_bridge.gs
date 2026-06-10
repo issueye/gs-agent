@@ -37,6 +37,62 @@ function resolveProvider(store, agent) {
   return undefined;
 }
 
+function gatewayIMPrompt(input) {
+  let value = input || {};
+  let lines = [];
+  lines.push("IM message received through gateway.");
+  if (value.platform) {
+    lines.push("Platform: " + value.platform);
+  }
+  if (value.adapter) {
+    lines.push("Adapter: " + value.adapter);
+  }
+  if (value.channelId) {
+    lines.push("Channel: " + value.channelId);
+  }
+  if (value.conversationId) {
+    lines.push("Conversation: " + value.conversationId);
+  }
+  if (value.chat || value.chatId) {
+    lines.push("Chat: " + String(value.chat || value.chatId));
+  }
+  if (value.sender || value.senderId) {
+    lines.push("From: " + String(value.sender || value.senderId));
+  }
+  lines.push("");
+  lines.push(String(value.text || ""));
+  return lines.join("\n");
+}
+
+function bridgeInput(body, task) {
+  let input = body.input || {};
+  if (task.kind === "agent.im" || (body.source && body.source.type === "im")) {
+    let im = input.im || input;
+    let next = {};
+    for (let key in input) {
+      next[key] = input[key];
+    }
+    next.text = gatewayIMPrompt(im);
+    return next;
+  }
+  return input;
+}
+
+function bridgeRun(body, task) {
+  let run = body.run || {};
+  let next = {};
+  for (let key in run) {
+    next[key] = run[key];
+  }
+  if ((task.kind === "agent.im" || (body.source && body.source.type === "im")) && !next.sessionId && !next.session) {
+    let source = body.source || {};
+    let input = body.input || {};
+    let im = input.im || {};
+    next.sessionId = source.conversationId || im.conversationId || im.conversation_id || "";
+  }
+  return next;
+}
+
 function agentRunConfig(gatewayModel, task) {
   let agentId = resolveTaskAgentId(task);
   if (agentId === "") {
@@ -78,6 +134,8 @@ function agentRunConfig(gatewayModel, task) {
 
 function agentTaskPayload(gatewayModel, task) {
   let body = task.payload || {};
+  let input = bridgeInput(body, task);
+  let run = bridgeRun(body, task);
   return {
     taskId: task.id,
     id: task.id,
@@ -85,8 +143,8 @@ function agentTaskPayload(gatewayModel, task) {
     name: task.name,
     root: gatewayModel.config.gateway.agentRoot,
     source: body.source || {},
-    input: body.input || {},
-    run: body.run || {},
+    input: input,
+    run: run,
     config: agentRunConfig(gatewayModel, task),
     stream: {
       url: wsBaseUrl(gatewayModel.config) + "/ws/agent-events",
@@ -94,6 +152,10 @@ function agentTaskPayload(gatewayModel, task) {
     },
     payload: body.payload || {},
   };
+}
+
+export function buildAgentTaskPayloadForGateway(gatewayModel, task) {
+  return agentTaskPayload(gatewayModel, task);
 }
 
 function callAgent(gatewayModel, task) {
@@ -124,12 +186,21 @@ export function createAgentBridgeModel(gatewayModel) {
 
     try {
       let result = callAgent(gatewayModel, task);
+      let replyInput = createGatewayIMReply(task, result);
+      let reply = undefined;
+      if (replyInput) {
+        reply = gatewayModel.store.createIMReply(replyInput);
+        addEvent("im_reply_pending", task, {
+          reply: reply,
+        }, "accepted");
+      }
       let updated = gatewayModel.store.updateTask(id, {
         status: "done",
         result: result,
       });
       addEvent("done", task, {
         result: result,
+        reply: reply,
       }, "done");
       return updated;
     } catch (error) {
@@ -147,4 +218,37 @@ export function createAgentBridgeModel(gatewayModel) {
   return {
     runTask: runTask,
   };
+}
+
+function createGatewayIMReply(task, result) {
+  let payload = task.payload || {};
+  let source = payload.source || {};
+  if (task.kind !== "agent.im" && source.type !== "im") {
+    return undefined;
+  }
+  let input = payload.input || {};
+  let im = input.im || {};
+  let answer = String((result && result.answer) || "");
+  if (answer === "") {
+    return undefined;
+  }
+  return {
+    conversationId: source.conversationId || im.conversationId || "",
+    taskId: task.id,
+    eventId: source.eventId || "",
+    channelId: source.channelId || im.channelId || "",
+    chatId: im.chatId || im.chat || "",
+    senderId: im.senderId || im.sender || "",
+    messageId: source.messageId || im.messageId || "",
+    text: answer,
+    status: "pending",
+    payload: {
+      source: source,
+      input: im,
+    },
+  };
+}
+
+export function buildGatewayIMReply(task, result) {
+  return createGatewayIMReply(task, result);
 }

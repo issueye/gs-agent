@@ -108,6 +108,7 @@ Invoke-RestMethod `
 
 返回中会包含事件记录和新建任务。任务可通过 `/api/tasks/:id/run` 派发给 `gs-agent/gateway-task.gs`。
 网关不再提供 `fake`、`dryRun` 或 `allowReal` 分支；运行任务会直接进入真实 agent 链路，并要求 `gs-agent/agent.toml` 中存在可用模型配置。
+IM 任务成功后，网关会创建 `gateway_im_replies` pending 记录；平台发送和重试策略应继续在网关侧实现。
 
 每次运行都会写入 `agent_bridge` 事件，便于桌面端审计。
 网关与 agent 的功能边界见 `docs/gateway-agent-boundary.md`。

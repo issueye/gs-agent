@@ -123,18 +123,8 @@ foreach ($ConfigFile in @("agent.toml")) {
   }
 }
 
-$IMBotPlugin = Join-Path $ProjectRoot "plugins\im-bot\gtp-imbot.exe"
-if (!(Test-Path -LiteralPath $IMBotPlugin)) {
-  throw "IM bot plugin executable not found: $IMBotPlugin"
-}
-
-$OutputIMBotDir = Join-Path $OutputDir ".agent\plugins\im-bot"
-New-Item -ItemType Directory -Force -Path $OutputIMBotDir | Out-Null
-Copy-Item -LiteralPath $IMBotPlugin -Destination $OutputIMBotDir -Force
-
 $Item = Get-Item -LiteralPath $Output
 Write-Host "==> packaged: $($Item.FullName)"
 Write-Host "==> config:   $(Join-Path $OutputDir "agent.toml")"
-Write-Host "==> im-bot:   $(Join-Path $OutputIMBotDir "gtp-imbot.exe")"
 Write-Host "==> size:     $($Item.Length) bytes"
 Write-Host "==> updated:  $($Item.LastWriteTime)"

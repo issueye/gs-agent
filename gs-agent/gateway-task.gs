@@ -1,13 +1,9 @@
-import { loadAgentApp, runAgentIMTask, runAgentTask } from "@/agent/app";
-import { imMessagePrompt } from "@/agent/im/bridge";
+import { loadAgentApp, runAgentTask } from "@/agent/app";
 
 let wsClient = require("@std/net/ws/client");
 
 function gatewayTaskText(task) {
   let taskInput = (task && task.input) ? task.input : {};
-  if (task.kind === "agent.im") {
-    return imMessagePrompt(taskInput.im || taskInput);
-  }
   let text = String(taskInput.text || "");
   if (text === "") {
     throw new Error("gateway task input.text is required");
@@ -90,22 +86,16 @@ export function runGatewayTask(task) {
     }
   };
   let result;
-  if (input.kind === "agent.im") {
-    let taskInput = input.input || {};
-    result = runAgentIMTask({
-      app: app,
-      input: taskInput.im || taskInput,
-      promptMode: "direct",
-      onEvent: onEvent,
-    });
-  } else {
-    result = runAgentTask({
-      app: app,
-      taskText: gatewayTaskText(input),
-      promptMode: "direct",
-      onEvent: onEvent,
-    });
-  }
+  let runOptions = input.run || {};
+  let sessionId = runOptions.sessionId || runOptions.session || "";
+  result = runAgentTask({
+    app: app,
+    taskText: gatewayTaskText(input),
+    promptMode: "direct",
+    session: sessionId,
+    resumeSession: sessionId !== "",
+    onEvent: onEvent,
+  });
   result.ok = true;
   if (streamWS) {
     streamWS.sendText(JSON.stringify({

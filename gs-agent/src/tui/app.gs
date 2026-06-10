@@ -179,6 +179,36 @@ function loadRecentSession(state) {
   });
 }
 
+function loadAppSession(state) {
+  state.events = [];
+  invalidateTranscript(state);
+  let session = createJSONLSession(state.app.sessionFile, {
+    sessionId: state.app.sessionId,
+    archiveFile: state.app.sessionArchiveFile,
+  });
+  if (fs.existsSync(state.app.sessionFile)) {
+    state.events = session.readAll();
+  }
+  state.messages = session.readMessages({ levels: ["primary", "working"] });
+  invalidateTranscript(state);
+  state.answer = readAnswer(state);
+  appendAnswerEvent(state);
+  state.detailScroll = 0;
+  if (state.events.length === 0) {
+    state.error = tr(state, "newSession");
+  } else {
+    state.error = tr(state, "sessionLoaded");
+  }
+  state.logger.info("session loaded", {
+    sessionId: state.app.sessionId,
+    sessionFile: state.app.sessionFile,
+    answerFile: state.app.answerFile,
+    events: state.events.length,
+    messages: state.messages.length,
+    hasAnswer: !!state.answer,
+  });
+}
+
 function resetConversationState(state) {
   state.events = [];
   state.messages = [];
@@ -869,8 +899,13 @@ function handleKey(state, item, ctx) {
   }
 }
 
-export function runAgentTui() {
-  let app = loadAgentApp();
+export function runAgentTui(options) {
+  if (!options) {
+    options = {};
+  }
+  let app = loadAgentApp(options.root, {
+    session: options.session,
+  });
   let state = runTuiApp({
     name: "gs-agent tui",
     title: "gs-agent tui",
@@ -900,7 +935,11 @@ export function runAgentTui() {
         logFile: app.logFile,
         latestLogFile: app.latestLogFile,
       });
-      startNewSession(state);
+      if (options.session) {
+        loadAppSession(state);
+      } else {
+        startNewSession(state);
+      }
       syncViewState(state);
     },
     onKey: function(state, item, ctx) {

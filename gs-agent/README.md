@@ -65,19 +65,26 @@ E:\codes\gts\dist\gs.exe --timeout 60s run
 E:\codes\gts\dist\gs.exe --timeout 0 run --tui
 ```
 
-运行 IM 机器人桥接：
+指定已有会话继续对话：
 
 ```powershell
-E:\codes\gts\dist\gs.exe --timeout 0 run --im
+E:\codes\gts\dist\gs.exe --timeout 0 run -- --session <session-id> --tui
 ```
 
-`--im` 会启动 `@plugin/im-bot`，监听插件入站消息事件，并通过 agent 内部事件总线转成 `agent_input`。agent 会按多轮对话处理该消息，默认把回答通过同一 IM 适配器发回。
-打包后 IM 机器人插件位于 `.agent/plugins/im-bot/gtp-imbot.exe`；插件配置放在 `agent.toml` 的 `[im.plugin]` 中，不放入 `project.toml`。
+`--session` 也可以写成 `-s`，参数支持 session id、`.agent/sessions/<id>` 目录、`session.jsonl` 路径，或 `current` / `latest`。
+
+IM 入站、会话映射和出站回复由 `gs-gateway` 负责。`gs-agent` 只接收网关传入的标准任务 payload，并运行模型对话。
 
 打包后的程序直接使用：
 
 ```powershell
 .\dist\gs-agent.exe --tui
+```
+
+打包后同样可以指定会话：
+
+```powershell
+.\dist\gs-agent.exe --session <session-id> --tui
 ```
 
 打包后 `agent.toml` 会复制到 `gs-agent.exe` 所在目录；程序默认从自身所在目录读取配置，而不是从启动命令的当前目录读取。
@@ -237,23 +244,9 @@ exports.run = function(input) {
 E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
 ```
 
-## IM 机器人事件总线
+## 网关任务入口
 
-项目内置了一个中间事件总线，IM 插件事件不会直接调用 agent，而是先规范化为：
-
-```javascript
-{
-  source: "im",
-  platform: "onebot",
-  adapter: "qq-local",
-  sender: "user-id",
-  chat: "group-or-chat-id",
-  replyTo: "target-id",
-  text: "用户消息原文"
-}
-```
-
-`src/agent/im/bridge.gs` 默认监听 `message`、`message_create`、`im_message` 和 `inbound_message`。语言层 IM 插件发来的消息进入总线后，会触发 `agent_input`，再由 `runAgentIMBridge` 调用现有 `runAgentTurn`。
+`gateway-task.gs` 是网关调用 agent 的稳定入口。IM、桌面端和定时任务都应先由 `gs-gateway` 归一化为标准 task payload，再通过该入口调用 agent。
 
 ## 技能系统
 
