@@ -1,7 +1,163 @@
-let db = require("@std/db");
+import orm from "@std/orm";
+
 let fs = require("@std/fs");
 let path = require("@std/path");
 let crypto = require("@std/crypto");
+
+let TABLES = {
+  events: "gateway_events",
+  tasks: "gateway_tasks",
+  clients: "gateway_clients",
+  providers: "gateway_providers",
+  agents: "gateway_agents",
+  agentInstances: "gateway_agent_instances",
+  schedules: "gateway_schedules",
+  imChannels: "gateway_im_channels",
+  imConversations: "gateway_im_conversations",
+  imReplies: "gateway_im_replies",
+};
+
+let GATEWAY_SCHEMA = [
+  {
+    table: TABLES.events,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "source", type: "text", notNull: true },
+      { name: "type", type: "text", notNull: true },
+      { name: "subject", type: "text" },
+      { name: "payload", type: "text", notNull: true },
+      { name: "status", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.tasks,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "name", type: "text", notNull: true },
+      { name: "kind", type: "text", notNull: true },
+      { name: "status", type: "text", notNull: true },
+      { name: "schedule", type: "text" },
+      { name: "payload", type: "text", notNull: true },
+      { name: "result", type: "text" },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.clients,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "kind", type: "text", notNull: true },
+      { name: "name", type: "text", notNull: true },
+      { name: "status", type: "text", notNull: true },
+      { name: "meta", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.providers,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "name", type: "text", notNull: true },
+      { name: "type", type: "text", notNull: true },
+      { name: "enabled", type: "integer", notNull: true },
+      { name: "config", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.agents,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "name", type: "text", notNull: true },
+      { name: "provider_id", type: "text" },
+      { name: "model_provider", type: "text", notNull: true },
+      { name: "model_name", type: "text" },
+      { name: "transport", type: "text", notNull: true },
+      { name: "enabled", type: "integer", notNull: true },
+      { name: "config", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.agentInstances,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "agent_id", type: "text", notNull: true },
+      { name: "name", type: "text", notNull: true },
+      { name: "status", type: "text", notNull: true },
+      { name: "config", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.schedules,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "name", type: "text", notNull: true },
+      { name: "kind", type: "text", notNull: true },
+      { name: "status", type: "text", notNull: true },
+      { name: "schedule", type: "text", notNull: true },
+      { name: "payload", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.imChannels,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "platform", type: "text", notNull: true },
+      { name: "adapter", type: "text", notNull: true },
+      { name: "name", type: "text", notNull: true },
+      { name: "status", type: "text", notNull: true },
+      { name: "config", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.imConversations,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "channel_id", type: "text", notNull: true },
+      { name: "chat_id", type: "text", notNull: true },
+      { name: "sender_id", type: "text", notNull: true },
+      { name: "subject", type: "text", notNull: true },
+      { name: "status", type: "text", notNull: true },
+      { name: "last_message_id", type: "text", notNull: true },
+      { name: "last_text", type: "text", notNull: true },
+      { name: "last_event_id", type: "text", notNull: true },
+      { name: "last_at", type: "text", notNull: true },
+      { name: "meta", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+  {
+    table: TABLES.imReplies,
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "conversation_id", type: "text", notNull: true },
+      { name: "task_id", type: "text" },
+      { name: "event_id", type: "text" },
+      { name: "channel_id", type: "text", notNull: true },
+      { name: "chat_id", type: "text", notNull: true },
+      { name: "sender_id", type: "text", notNull: true },
+      { name: "message_id", type: "text" },
+      { name: "text", type: "text", notNull: true },
+      { name: "status", type: "text", notNull: true },
+      { name: "payload", type: "text", notNull: true },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
+];
 
 function now() {
   return (new Date()).toISOString();
@@ -21,17 +177,20 @@ function parseJSON(text, fallback) {
   return JSON.parse(String(text));
 }
 
-function ensureSchema(conn) {
-  conn.exec("create table if not exists gateway_events (id text primary key, source text not null, type text not null, subject text, payload text not null, status text not null, created_at text not null)");
-  conn.exec("create table if not exists gateway_tasks (id text primary key, name text not null, kind text not null, status text not null, schedule text, payload text not null, result text, created_at text not null, updated_at text not null)");
-  conn.exec("create table if not exists gateway_clients (id text primary key, kind text not null, name text not null, status text not null, meta text not null, created_at text not null, updated_at text not null)");
-  conn.exec("create table if not exists gateway_providers (id text primary key, name text not null, type text not null, enabled integer not null, config text not null, created_at text not null, updated_at text not null)");
-  conn.exec("create table if not exists gateway_agents (id text primary key, name text not null, provider_id text, model_provider text not null, model_name text, transport text not null, enabled integer not null, config text not null, created_at text not null, updated_at text not null)");
-  conn.exec("create table if not exists gateway_agent_instances (id text primary key, agent_id text not null, name text not null, status text not null, config text not null, created_at text not null, updated_at text not null)");
-  conn.exec("create table if not exists gateway_schedules (id text primary key, name text not null, kind text not null, status text not null, schedule text not null, payload text not null, created_at text not null, updated_at text not null)");
-  conn.exec("create table if not exists gateway_im_channels (id text primary key, platform text not null, adapter text not null, name text not null, status text not null, config text not null, created_at text not null, updated_at text not null)");
-  conn.exec("create table if not exists gateway_im_conversations (id text primary key, channel_id text not null, chat_id text not null, sender_id text not null, subject text not null, status text not null, last_message_id text not null, last_text text not null, last_event_id text not null, last_at text not null, meta text not null, created_at text not null, updated_at text not null)");
-  conn.exec("create table if not exists gateway_im_replies (id text primary key, conversation_id text not null, task_id text, event_id text, channel_id text not null, chat_id text not null, sender_id text not null, message_id text, text text not null, status text not null, payload text not null, created_at text not null, updated_at text not null)");
+function ensureSchema(storeDb) {
+  storeDb.autoMigrate(GATEWAY_SCHEMA);
+}
+
+function table(storeDb, name) {
+  return storeDb.table(name);
+}
+
+function findById(storeDb, tableName, id) {
+  return table(storeDb, tableName).where("id = ?", id).first();
+}
+
+function deleteById(storeDb, tableName, id) {
+  return table(storeDb, tableName).where("id = ?", id).delete();
 }
 
 function rowsToRecords(rows) {
@@ -195,16 +354,21 @@ function textList(value) {
 
 export function openGatewayStore(databaseFile) {
   fs.mkdirSync(path.dirname(databaseFile), { recursive: true });
-  let conn = db.open("sqlite", databaseFile);
+  let conn = orm.connect("sqlite", databaseFile);
   ensureSchema(conn);
 
   function addEvent(source, type, subject, payload, status) {
     let id = "evt-" + crypto.randomUUID();
     let createdAt = now();
-    conn.exec(
-      "insert into gateway_events (id, source, type, subject, payload, status, created_at) values (?, ?, ?, ?, ?, ?, ?)",
-      [id, source, type, subject || "", jsonText(payload), status || "received", createdAt]
-    );
+    table(conn, TABLES.events).insert({
+      id: id,
+      source: source,
+      type: type,
+      subject: subject || "",
+      payload: jsonText(payload),
+      status: status || "received",
+      created_at: createdAt,
+    });
     return {
       id: id,
       source: source,
@@ -218,32 +382,29 @@ export function openGatewayStore(databaseFile) {
 
   function listEvents(limit) {
     let n = Number(limit || 50);
-    return rowsToRecords(conn.query("select * from gateway_events order by created_at desc limit ?", [n]));
+    return rowsToRecords(table(conn, TABLES.events).orderBy("created_at desc").limit(n).find());
   }
 
   function createTask(input) {
     let id = "task-" + crypto.randomUUID();
     let createdAt = now();
     let status = input.status || "pending";
-    conn.exec(
-      "insert into gateway_tasks (id, name, kind, status, schedule, payload, result, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        id,
-        input.name || "task",
-        input.kind || "agent",
-        status,
-        input.schedule || "",
-        jsonText(input.payload || {}),
-        "",
-        createdAt,
-        createdAt,
-      ]
-    );
+    table(conn, TABLES.tasks).insert({
+      id: id,
+      name: input.name || "task",
+      kind: input.kind || "agent",
+      status: status,
+      schedule: input.schedule || "",
+      payload: jsonText(input.payload || {}),
+      result: "",
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
     return getTask(id);
   }
 
   function getTask(id) {
-    let row = conn.queryOne("select * from gateway_tasks where id = ?", [id]);
+    let row = findById(conn, TABLES.tasks, id);
     if (!row) {
       return undefined;
     }
@@ -253,9 +414,9 @@ export function openGatewayStore(databaseFile) {
   function listTasks(status, limit) {
     let n = Number(limit || 50);
     if (status) {
-      return rowsToRecords(conn.query("select * from gateway_tasks where status = ? order by created_at desc limit ?", [status, n]));
+      return rowsToRecords(table(conn, TABLES.tasks).where("status = ?", status).orderBy("created_at desc").limit(n).find());
     }
-    return rowsToRecords(conn.query("select * from gateway_tasks order by created_at desc limit ?", [n]));
+    return rowsToRecords(table(conn, TABLES.tasks).orderBy("created_at desc").limit(n).find());
   }
 
   function updateTask(id, patch) {
@@ -273,42 +434,41 @@ export function openGatewayStore(databaseFile) {
       result = patch.result;
     }
     let updatedAt = now();
-    conn.exec(
-      "update gateway_tasks set status = ?, payload = ?, result = ?, updated_at = ? where id = ?",
-      [status, jsonText(payload), jsonText(result), updatedAt, id]
-    );
+    table(conn, TABLES.tasks).where("id = ?", id).update({
+      status: status,
+      payload: jsonText(payload),
+      result: jsonText(result),
+      updated_at: updatedAt,
+    });
     return getTask(id);
   }
 
   function createSchedule(input) {
     let id = "sch-" + crypto.randomUUID();
     let createdAt = now();
-    conn.exec(
-      "insert into gateway_schedules (id, name, kind, status, schedule, payload, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        id,
-        input.name || "schedule",
-        input.kind || "agent",
-        input.status || "active",
-        jsonText(input.schedule || {}),
-        jsonText(input.payload || {}),
-        createdAt,
-        createdAt,
-      ]
-    );
+    table(conn, TABLES.schedules).insert({
+      id: id,
+      name: input.name || "schedule",
+      kind: input.kind || "agent",
+      status: input.status || "active",
+      schedule: jsonText(input.schedule || {}),
+      payload: jsonText(input.payload || {}),
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
     return getSchedule(id);
   }
 
   function listSchedules(status, limit) {
     let n = Number(limit || 50);
     if (status) {
-      return scheduleRowsToRecords(conn.query("select * from gateway_schedules where status = ? order by created_at desc limit ?", [status, n]));
+      return scheduleRowsToRecords(table(conn, TABLES.schedules).where("status = ?", status).orderBy("created_at desc").limit(n).find());
     }
-    return scheduleRowsToRecords(conn.query("select * from gateway_schedules order by created_at desc limit ?", [n]));
+    return scheduleRowsToRecords(table(conn, TABLES.schedules).orderBy("created_at desc").limit(n).find());
   }
 
   function getSchedule(id) {
-    let row = conn.queryOne("select * from gateway_schedules where id = ?", [id]);
+    let row = findById(conn, TABLES.schedules, id);
     if (!row) {
       return undefined;
     }
@@ -321,18 +481,14 @@ export function openGatewayStore(databaseFile) {
       return undefined;
     }
     let updatedAt = now();
-    conn.exec(
-      "update gateway_schedules set name = ?, kind = ?, status = ?, schedule = ?, payload = ?, updated_at = ? where id = ?",
-      [
-        patch.name || existing.name,
-        patch.kind || existing.kind,
-        patch.status || existing.status,
-        jsonText(("schedule" in patch) ? patch.schedule : existing.schedule),
-        jsonText(("payload" in patch) ? patch.payload : existing.payload),
-        updatedAt,
-        id,
-      ]
-    );
+    table(conn, TABLES.schedules).where("id = ?", id).update({
+      name: patch.name || existing.name,
+      kind: patch.kind || existing.kind,
+      status: patch.status || existing.status,
+      schedule: jsonText(("schedule" in patch) ? patch.schedule : existing.schedule),
+      payload: jsonText(("payload" in patch) ? patch.payload : existing.payload),
+      updated_at: updatedAt,
+    });
     return getSchedule(id);
   }
 
@@ -341,38 +497,47 @@ export function openGatewayStore(databaseFile) {
     if (!existing) {
       return undefined;
     }
-    conn.exec("delete from gateway_schedules where id = ?", [id]);
+    deleteById(conn, TABLES.schedules, id);
     return existing;
   }
 
   function upsertClient(kind, name, meta) {
     let id = String(kind) + ":" + String(name);
-    let existing = conn.queryOne("select id from gateway_clients where id = ?", [id]);
+    let existing = findById(conn, TABLES.clients, id);
     let updatedAt = now();
     if (existing) {
-      conn.exec("update gateway_clients set status = ?, meta = ?, updated_at = ? where id = ?", ["online", jsonText(meta || {}), updatedAt, id]);
+      table(conn, TABLES.clients).where("id = ?", id).update({
+        status: "online",
+        meta: jsonText(meta || {}),
+        updated_at: updatedAt,
+      });
     } else {
-      conn.exec(
-        "insert into gateway_clients (id, kind, name, status, meta, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?)",
-        [id, kind, name, "online", jsonText(meta || {}), updatedAt, updatedAt]
-      );
+      table(conn, TABLES.clients).insert({
+        id: id,
+        kind: kind,
+        name: name,
+        status: "online",
+        meta: jsonText(meta || {}),
+        created_at: updatedAt,
+        updated_at: updatedAt,
+      });
     }
-    return rowsToRecords([conn.queryOne("select * from gateway_clients where id = ?", [id])])[0];
+    return rowsToRecords([findById(conn, TABLES.clients, id)])[0];
   }
 
   function listClients(kind) {
     if (kind) {
-      return rowsToRecords(conn.query("select * from gateway_clients where kind = ? order by updated_at desc", [kind]));
+      return rowsToRecords(table(conn, TABLES.clients).where("kind = ?", kind).orderBy("updated_at desc").find());
     }
-    return rowsToRecords(conn.query("select * from gateway_clients order by updated_at desc"));
+    return rowsToRecords(table(conn, TABLES.clients).orderBy("updated_at desc").find());
   }
 
   function listProviders() {
-    return providerRowsToRecords(conn.query("select * from gateway_providers order by updated_at desc"));
+    return providerRowsToRecords(table(conn, TABLES.providers).orderBy("updated_at desc").find());
   }
 
   function getProvider(id) {
-    let row = conn.queryOne("select * from gateway_providers where id = ?", [id]);
+    let row = findById(conn, TABLES.providers, id);
     if (!row) {
       return undefined;
     }
@@ -380,7 +545,7 @@ export function openGatewayStore(databaseFile) {
   }
 
   function getProviderSecret(id) {
-    let row = conn.queryOne("select * from gateway_providers where id = ?", [id]);
+    let row = findById(conn, TABLES.providers, id);
     if (!row) {
       return undefined;
     }
@@ -402,27 +567,24 @@ export function openGatewayStore(databaseFile) {
     let value = input || {};
     let id = String(value.id || ("provider-" + slug(value.name || value.type, "provider"))).trim();
     let createdAt = now();
-    conn.exec(
-      "insert into gateway_providers (id, name, type, enabled, config, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?)",
-      [
-        id,
-        String(value.name || id),
-        String(value.type || "openai"),
-        value.enabled === false ? 0 : 1,
-        jsonText({
-          baseUrl: String(value.baseUrl || ""),
-          defaultModel: String(value.defaultModel || ""),
-          apiKey: String(value.apiKey || ""),
-        }),
-        createdAt,
-        createdAt,
-      ]
-    );
+    table(conn, TABLES.providers).insert({
+      id: id,
+      name: String(value.name || id),
+      type: String(value.type || "openai"),
+      enabled: value.enabled === false ? 0 : 1,
+      config: jsonText({
+        baseUrl: String(value.baseUrl || ""),
+        defaultModel: String(value.defaultModel || ""),
+        apiKey: String(value.apiKey || ""),
+      }),
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
     return getProvider(id);
   }
 
   function updateProvider(id, patch) {
-    let existingRow = conn.queryOne("select * from gateway_providers where id = ?", [id]);
+    let existingRow = findById(conn, TABLES.providers, id);
     if (!existingRow) {
       return undefined;
     }
@@ -438,17 +600,13 @@ export function openGatewayStore(databaseFile) {
       nextConfig.apiKey = String(value.apiKey || "");
     }
     let updatedAt = now();
-    conn.exec(
-      "update gateway_providers set name = ?, type = ?, enabled = ?, config = ?, updated_at = ? where id = ?",
-      [
-        ("name" in value) ? String(value.name || existing.name) : existing.name,
-        ("type" in value) ? String(value.type || existing.type) : existing.type,
-        ("enabled" in value) ? (value.enabled === false ? 0 : 1) : (existing.enabled ? 1 : 0),
-        jsonText(nextConfig),
-        updatedAt,
-        id,
-      ]
-    );
+    table(conn, TABLES.providers).where("id = ?", id).update({
+      name: ("name" in value) ? String(value.name || existing.name) : existing.name,
+      type: ("type" in value) ? String(value.type || existing.type) : existing.type,
+      enabled: ("enabled" in value) ? (value.enabled === false ? 0 : 1) : (existing.enabled ? 1 : 0),
+      config: jsonText(nextConfig),
+      updated_at: updatedAt,
+    });
     return getProvider(id);
   }
 
@@ -457,16 +615,16 @@ export function openGatewayStore(databaseFile) {
     if (!existing) {
       return undefined;
     }
-    conn.exec("delete from gateway_providers where id = ?", [id]);
+    deleteById(conn, TABLES.providers, id);
     return existing;
   }
 
   function listAgents() {
-    return agentRowsToRecords(conn.query("select * from gateway_agents order by updated_at desc"));
+    return agentRowsToRecords(table(conn, TABLES.agents).orderBy("updated_at desc").find());
   }
 
   function getAgent(id) {
-    let row = conn.queryOne("select * from gateway_agents where id = ?", [id]);
+    let row = findById(conn, TABLES.agents, id);
     if (!row) {
       return undefined;
     }
@@ -477,35 +635,32 @@ export function openGatewayStore(databaseFile) {
     let value = input || {};
     let id = String(value.id || ("agent-" + slug(value.name, "agent"))).trim();
     let createdAt = now();
-    conn.exec(
-      "insert into gateway_agents (id, name, provider_id, model_provider, model_name, transport, enabled, config, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        id,
-        String(value.name || id),
-        String(value.providerId || value.provider_id || ""),
-        String(value.modelProvider || value.model_provider || "openai"),
-        String(value.modelName || value.model_name || ""),
-        String(value.transport || "websocket"),
-        value.enabled === false ? 0 : 1,
-        jsonText({
-          baseUrl: String(value.baseUrl || ""),
-          commandArgs: textList(value.commandArgs),
-          systemPrompt: String(value.systemPrompt || ""),
-          maxIterations: Number(value.maxIterations || 0),
-          toolWhitelist: textList(value.toolWhitelist),
-          networkAllow: textList(value.networkAllow),
-          mcpServerIds: textList(value.mcpServerIds),
-          skillIds: textList(value.skillIds),
-        }),
-        createdAt,
-        createdAt,
-      ]
-    );
+    table(conn, TABLES.agents).insert({
+      id: id,
+      name: String(value.name || id),
+      provider_id: String(value.providerId || value.provider_id || ""),
+      model_provider: String(value.modelProvider || value.model_provider || "openai"),
+      model_name: String(value.modelName || value.model_name || ""),
+      transport: String(value.transport || "websocket"),
+      enabled: value.enabled === false ? 0 : 1,
+      config: jsonText({
+        baseUrl: String(value.baseUrl || ""),
+        commandArgs: textList(value.commandArgs),
+        systemPrompt: String(value.systemPrompt || ""),
+        maxIterations: Number(value.maxIterations || 0),
+        toolWhitelist: textList(value.toolWhitelist),
+        networkAllow: textList(value.networkAllow),
+        mcpServerIds: textList(value.mcpServerIds),
+        skillIds: textList(value.skillIds),
+      }),
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
     return getAgent(id);
   }
 
   function updateAgent(id, patch) {
-    let existingRow = conn.queryOne("select * from gateway_agents where id = ?", [id]);
+    let existingRow = findById(conn, TABLES.agents, id);
     if (!existingRow) {
       return undefined;
     }
@@ -523,20 +678,16 @@ export function openGatewayStore(databaseFile) {
       skillIds: ("skillIds" in value) ? textList(value.skillIds) : existingConfig.skillIds || [],
     };
     let updatedAt = now();
-    conn.exec(
-      "update gateway_agents set name = ?, provider_id = ?, model_provider = ?, model_name = ?, transport = ?, enabled = ?, config = ?, updated_at = ? where id = ?",
-      [
-        ("name" in value) ? String(value.name || existing.name) : existing.name,
-        ("providerId" in value || "provider_id" in value) ? String(value.providerId || value.provider_id || "") : existing.providerId,
-        ("modelProvider" in value || "model_provider" in value) ? String(value.modelProvider || value.model_provider || existing.modelProvider) : existing.modelProvider,
-        ("modelName" in value || "model_name" in value) ? String(value.modelName || value.model_name || "") : existing.modelName,
-        ("transport" in value) ? String(value.transport || existing.transport) : existing.transport,
-        ("enabled" in value) ? (value.enabled === false ? 0 : 1) : (existing.enabled ? 1 : 0),
-        jsonText(nextConfig),
-        updatedAt,
-        id,
-      ]
-    );
+    table(conn, TABLES.agents).where("id = ?", id).update({
+      name: ("name" in value) ? String(value.name || existing.name) : existing.name,
+      provider_id: ("providerId" in value || "provider_id" in value) ? String(value.providerId || value.provider_id || "") : existing.providerId,
+      model_provider: ("modelProvider" in value || "model_provider" in value) ? String(value.modelProvider || value.model_provider || existing.modelProvider) : existing.modelProvider,
+      model_name: ("modelName" in value || "model_name" in value) ? String(value.modelName || value.model_name || "") : existing.modelName,
+      transport: ("transport" in value) ? String(value.transport || existing.transport) : existing.transport,
+      enabled: ("enabled" in value) ? (value.enabled === false ? 0 : 1) : (existing.enabled ? 1 : 0),
+      config: jsonText(nextConfig),
+      updated_at: updatedAt,
+    });
     return getAgent(id);
   }
 
@@ -545,16 +696,16 @@ export function openGatewayStore(databaseFile) {
     if (!existing) {
       return undefined;
     }
-    conn.exec("delete from gateway_agents where id = ?", [id]);
+    deleteById(conn, TABLES.agents, id);
     return existing;
   }
 
   function listAgentInstances() {
-    return agentInstanceRowsToRecords(conn.query("select * from gateway_agent_instances order by updated_at desc"));
+    return agentInstanceRowsToRecords(table(conn, TABLES.agentInstances).orderBy("updated_at desc").find());
   }
 
   function getAgentInstance(id) {
-    let row = conn.queryOne("select * from gateway_agent_instances where id = ?", [id]);
+    let row = findById(conn, TABLES.agentInstances, id);
     if (!row) {
       return undefined;
     }
@@ -566,23 +717,20 @@ export function openGatewayStore(databaseFile) {
     let agentId = String(value.agentId || value.agent_id || "");
     let id = String(value.id || ("inst-" + crypto.randomUUID()));
     let createdAt = now();
-    conn.exec(
-      "insert into gateway_agent_instances (id, agent_id, name, status, config, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?)",
-      [
-        id,
-        agentId,
-        String(value.name || agentId || id),
-        String(value.status || "ready"),
-        jsonText(value.config || {}),
-        createdAt,
-        createdAt,
-      ]
-    );
+    table(conn, TABLES.agentInstances).insert({
+      id: id,
+      agent_id: agentId,
+      name: String(value.name || agentId || id),
+      status: String(value.status || "ready"),
+      config: jsonText(value.config || {}),
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
     return getAgentInstance(id);
   }
 
   function updateAgentInstance(id, patch) {
-    let existingRow = conn.queryOne("select * from gateway_agent_instances where id = ?", [id]);
+    let existingRow = findById(conn, TABLES.agentInstances, id);
     if (!existingRow) {
       return undefined;
     }
@@ -596,16 +744,12 @@ export function openGatewayStore(databaseFile) {
       }
     }
     let updatedAt = now();
-    conn.exec(
-      "update gateway_agent_instances set name = ?, status = ?, config = ?, updated_at = ? where id = ?",
-      [
-        ("name" in value) ? String(value.name || existing.name) : existing.name,
-        ("status" in value) ? String(value.status || existing.status) : existing.status,
-        jsonText(config),
-        updatedAt,
-        id,
-      ]
-    );
+    table(conn, TABLES.agentInstances).where("id = ?", id).update({
+      name: ("name" in value) ? String(value.name || existing.name) : existing.name,
+      status: ("status" in value) ? String(value.status || existing.status) : existing.status,
+      config: jsonText(config),
+      updated_at: updatedAt,
+    });
     return getAgentInstance(id);
   }
 
@@ -614,7 +758,7 @@ export function openGatewayStore(databaseFile) {
     if (!existing) {
       return undefined;
     }
-    conn.exec("delete from gateway_agent_instances where id = ?", [id]);
+    deleteById(conn, TABLES.agentInstances, id);
     return existing;
   }
 
@@ -622,29 +766,26 @@ export function openGatewayStore(databaseFile) {
     let value = input || {};
     let id = value.id || ("imch-" + crypto.randomUUID());
     let createdAt = now();
-    conn.exec(
-      "insert into gateway_im_channels (id, platform, adapter, name, status, config, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        id,
-        String(value.platform || ""),
-        String(value.adapter || ""),
-        String(value.name || id),
-        String(value.status || "active"),
-        jsonText(value.config || {}),
-        createdAt,
-        createdAt,
-      ]
-    );
+    table(conn, TABLES.imChannels).insert({
+      id: id,
+      platform: String(value.platform || ""),
+      adapter: String(value.adapter || ""),
+      name: String(value.name || id),
+      status: String(value.status || "active"),
+      config: jsonText(value.config || {}),
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
     return getIMChannel(id);
   }
 
   function listIMChannels(limit) {
     let n = Number(limit || 50);
-    return imRowsToRecords(conn.query("select * from gateway_im_channels order by updated_at desc limit ?", [n]));
+    return imRowsToRecords(table(conn, TABLES.imChannels).orderBy("updated_at desc").limit(n).find());
   }
 
   function getIMChannel(id) {
-    let row = conn.queryOne("select * from gateway_im_channels where id = ?", [id]);
+    let row = findById(conn, TABLES.imChannels, id);
     if (!row) {
       return undefined;
     }
@@ -658,18 +799,14 @@ export function openGatewayStore(databaseFile) {
     }
     let value = patch || {};
     let updatedAt = now();
-    conn.exec(
-      "update gateway_im_channels set platform = ?, adapter = ?, name = ?, status = ?, config = ?, updated_at = ? where id = ?",
-      [
-        ("platform" in value) ? String(value.platform || "") : existing.platform,
-        ("adapter" in value) ? String(value.adapter || "") : existing.adapter,
-        ("name" in value) ? String(value.name || "") : existing.name,
-        ("status" in value) ? String(value.status || "") : existing.status,
-        jsonText(("config" in value) ? value.config : existing.config),
-        updatedAt,
-        id,
-      ]
-    );
+    table(conn, TABLES.imChannels).where("id = ?", id).update({
+      platform: ("platform" in value) ? String(value.platform || "") : existing.platform,
+      adapter: ("adapter" in value) ? String(value.adapter || "") : existing.adapter,
+      name: ("name" in value) ? String(value.name || "") : existing.name,
+      status: ("status" in value) ? String(value.status || "") : existing.status,
+      config: jsonText(("config" in value) ? value.config : existing.config),
+      updated_at: updatedAt,
+    });
     return getIMChannel(id);
   }
 
@@ -678,7 +815,7 @@ export function openGatewayStore(databaseFile) {
     if (!existing) {
       return undefined;
     }
-    conn.exec("delete from gateway_im_channels where id = ?", [id]);
+    deleteById(conn, TABLES.imChannels, id);
     return existing;
   }
 
@@ -688,60 +825,53 @@ export function openGatewayStore(databaseFile) {
     let channelId = String(value.channelId || value.channel_id || "");
     let chatId = String(value.chatId || value.chat_id || "");
     let senderId = String(value.senderId || value.sender_id || "");
-    let existing = conn.queryOne("select id, meta, created_at from gateway_im_conversations where id = ?", [id]);
+    let existing = findById(conn, TABLES.imConversations, id);
     let updatedAt = now();
     let lastAt = String(value.lastAt || value.last_at || updatedAt);
     if (existing) {
-      conn.exec(
-        "update gateway_im_conversations set channel_id = ?, chat_id = ?, sender_id = ?, subject = ?, status = ?, last_message_id = ?, last_text = ?, last_event_id = ?, last_at = ?, meta = ?, updated_at = ? where id = ?",
-        [
-          channelId,
-          chatId,
-          senderId,
-          String(value.subject || chatId || senderId),
-          String(value.status || "active"),
-          String(value.lastMessageId || value.last_message_id || ""),
-          String(value.lastText || value.last_text || ""),
-          String(value.lastEventId || value.last_event_id || ""),
-          lastAt,
-          jsonText(value.meta || parseJSON(existing.meta, {})),
-          updatedAt,
-          id,
-        ]
-      );
+      table(conn, TABLES.imConversations).where("id = ?", id).update({
+        channel_id: channelId,
+        chat_id: chatId,
+        sender_id: senderId,
+        subject: String(value.subject || chatId || senderId),
+        status: String(value.status || "active"),
+        last_message_id: String(value.lastMessageId || value.last_message_id || ""),
+        last_text: String(value.lastText || value.last_text || ""),
+        last_event_id: String(value.lastEventId || value.last_event_id || ""),
+        last_at: lastAt,
+        meta: jsonText(value.meta || parseJSON(existing.meta, {})),
+        updated_at: updatedAt,
+      });
     } else {
-      conn.exec(
-        "insert into gateway_im_conversations (id, channel_id, chat_id, sender_id, subject, status, last_message_id, last_text, last_event_id, last_at, meta, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-          id,
-          channelId,
-          chatId,
-          senderId,
-          String(value.subject || chatId || senderId),
-          String(value.status || "active"),
-          String(value.lastMessageId || value.last_message_id || ""),
-          String(value.lastText || value.last_text || ""),
-          String(value.lastEventId || value.last_event_id || ""),
-          lastAt,
-          jsonText(value.meta || {}),
-          updatedAt,
-          updatedAt,
-        ]
-      );
+      table(conn, TABLES.imConversations).insert({
+        id: id,
+        channel_id: channelId,
+        chat_id: chatId,
+        sender_id: senderId,
+        subject: String(value.subject || chatId || senderId),
+        status: String(value.status || "active"),
+        last_message_id: String(value.lastMessageId || value.last_message_id || ""),
+        last_text: String(value.lastText || value.last_text || ""),
+        last_event_id: String(value.lastEventId || value.last_event_id || ""),
+        last_at: lastAt,
+        meta: jsonText(value.meta || {}),
+        created_at: updatedAt,
+        updated_at: updatedAt,
+      });
     }
-    return rowsToRecords([conn.queryOne("select * from gateway_im_conversations where id = ?", [id])])[0];
+    return rowsToRecords([findById(conn, TABLES.imConversations, id)])[0];
   }
 
   function listIMConversations(channelId, limit) {
     let n = Number(limit || 50);
     if (channelId) {
-      return rowsToRecords(conn.query("select * from gateway_im_conversations where channel_id = ? order by last_at desc limit ?", [channelId, n]));
+      return rowsToRecords(table(conn, TABLES.imConversations).where("channel_id = ?", channelId).orderBy("last_at desc").limit(n).find());
     }
-    return rowsToRecords(conn.query("select * from gateway_im_conversations order by last_at desc limit ?", [n]));
+    return rowsToRecords(table(conn, TABLES.imConversations).orderBy("last_at desc").limit(n).find());
   }
 
   function getIMConversation(id) {
-    let row = conn.queryOne("select * from gateway_im_conversations where id = ?", [id]);
+    let row = findById(conn, TABLES.imConversations, id);
     if (!row) {
       return undefined;
     }
@@ -753,8 +883,8 @@ export function openGatewayStore(databaseFile) {
     if (!existing) {
       return undefined;
     }
-    conn.exec("delete from gateway_im_replies where conversation_id = ?", [id]);
-    conn.exec("delete from gateway_im_conversations where id = ?", [id]);
+    table(conn, TABLES.imReplies).where("conversation_id = ?", id).delete();
+    deleteById(conn, TABLES.imConversations, id);
     return existing;
   }
 
@@ -786,7 +916,7 @@ export function openGatewayStore(databaseFile) {
       return undefined;
     }
 
-    let tasks = rowsToRecords(conn.query("select * from gateway_tasks where kind = ? order by created_at asc", ["agent.im"]));
+    let tasks = rowsToRecords(table(conn, TABLES.tasks).where("kind = ?", "agent.im").orderBy("created_at asc").find());
     let messages = [];
     for (let task of tasks) {
       let payload = task.payload || {};
@@ -890,53 +1020,46 @@ export function openGatewayStore(databaseFile) {
     let value = input || {};
     let id = value.id || ("imrep-" + crypto.randomUUID());
     let createdAt = now();
-    conn.exec(
-      "insert into gateway_im_replies (id, conversation_id, task_id, event_id, channel_id, chat_id, sender_id, message_id, text, status, payload, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        id,
-        String(value.conversationId || value.conversation_id || ""),
-        String(value.taskId || value.task_id || ""),
-        String(value.eventId || value.event_id || ""),
-        String(value.channelId || value.channel_id || ""),
-        String(value.chatId || value.chat_id || ""),
-        String(value.senderId || value.sender_id || ""),
-        String(value.messageId || value.message_id || ""),
-        String(value.text || ""),
-        String(value.status || "pending"),
-        jsonText(value.payload || {}),
-        createdAt,
-        createdAt,
-      ]
-    );
-    return rowsToRecords([conn.queryOne("select * from gateway_im_replies where id = ?", [id])])[0];
+    table(conn, TABLES.imReplies).insert({
+      id: id,
+      conversation_id: String(value.conversationId || value.conversation_id || ""),
+      task_id: String(value.taskId || value.task_id || ""),
+      event_id: String(value.eventId || value.event_id || ""),
+      channel_id: String(value.channelId || value.channel_id || ""),
+      chat_id: String(value.chatId || value.chat_id || ""),
+      sender_id: String(value.senderId || value.sender_id || ""),
+      message_id: String(value.messageId || value.message_id || ""),
+      text: String(value.text || ""),
+      status: String(value.status || "pending"),
+      payload: jsonText(value.payload || {}),
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+    return rowsToRecords([findById(conn, TABLES.imReplies, id)])[0];
   }
 
   function updateIMReply(id, patch) {
-    let existingRow = conn.queryOne("select * from gateway_im_replies where id = ?", [id]);
+    let existingRow = findById(conn, TABLES.imReplies, id);
     if (!existingRow) {
       return undefined;
     }
     let existing = rowsToRecords([existingRow])[0];
     let value = patch || {};
     let updatedAt = now();
-    conn.exec(
-      "update gateway_im_replies set conversation_id = ?, task_id = ?, event_id = ?, channel_id = ?, chat_id = ?, sender_id = ?, message_id = ?, text = ?, status = ?, payload = ?, updated_at = ? where id = ?",
-      [
-        ("conversationId" in value) ? String(value.conversationId || "") : existing.conversation_id,
-        ("taskId" in value) ? String(value.taskId || "") : existing.task_id,
-        ("eventId" in value) ? String(value.eventId || "") : existing.event_id,
-        ("channelId" in value) ? String(value.channelId || "") : existing.channel_id,
-        ("chatId" in value) ? String(value.chatId || "") : existing.chat_id,
-        ("senderId" in value) ? String(value.senderId || "") : existing.sender_id,
-        ("messageId" in value) ? String(value.messageId || "") : existing.message_id,
-        ("text" in value) ? String(value.text || "") : existing.text,
-        ("status" in value) ? String(value.status || "") : existing.status,
-        jsonText(("payload" in value) ? value.payload : existing.payload),
-        updatedAt,
-        id,
-      ]
-    );
-    return rowsToRecords([conn.queryOne("select * from gateway_im_replies where id = ?", [id])])[0];
+    table(conn, TABLES.imReplies).where("id = ?", id).update({
+      conversation_id: ("conversationId" in value) ? String(value.conversationId || "") : existing.conversation_id,
+      task_id: ("taskId" in value) ? String(value.taskId || "") : existing.task_id,
+      event_id: ("eventId" in value) ? String(value.eventId || "") : existing.event_id,
+      channel_id: ("channelId" in value) ? String(value.channelId || "") : existing.channel_id,
+      chat_id: ("chatId" in value) ? String(value.chatId || "") : existing.chat_id,
+      sender_id: ("senderId" in value) ? String(value.senderId || "") : existing.sender_id,
+      message_id: ("messageId" in value) ? String(value.messageId || "") : existing.message_id,
+      text: ("text" in value) ? String(value.text || "") : existing.text,
+      status: ("status" in value) ? String(value.status || "") : existing.status,
+      payload: jsonText(("payload" in value) ? value.payload : existing.payload),
+      updated_at: updatedAt,
+    });
+    return rowsToRecords([findById(conn, TABLES.imReplies, id)])[0];
   }
 
   return {
