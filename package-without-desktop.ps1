@@ -5,6 +5,10 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
+function Write-Utf8NoBom([string]$PathValue, [string]$Content) {
+    [System.IO.File]::WriteAllText($PathValue, $Content, [System.Text.UTF8Encoding]::new($false))
+}
+
 Write-Host "=== GTS System Package (Without Desktop) ===" -ForegroundColor Cyan
 Write-Host ""
 
@@ -55,15 +59,38 @@ if (Test-Path $DistDir) {
     Remove-Item $DistDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $DistDir | Out-Null
-New-Item -ItemType Directory -Path "$DistDir\config" | Out-Null
+New-Item -ItemType Directory -Path "$DistDir\gateway" | Out-Null
+New-Item -ItemType Directory -Path "$DistDir\gateway\gs-agent" | Out-Null
 
-# Copy executables
-Copy-Item dist\gs-agent.exe $DistDir\
-Copy-Item dist\gs-gateway.exe $DistDir\
+# Copy gateway runtime
+Copy-Item dist\gs-gateway.exe "$DistDir\gateway\"
+Copy-Item gs-gateway\public "$DistDir\gateway\public" -Recurse
 
-# Copy config templates
-Copy-Item gs-gateway\gateway.example.toml "$DistDir\config\"
-Copy-Item gs-agent\agent.example.toml "$DistDir\config\"
+# Copy agent runtime used by the gateway bridge.
+Copy-Item dist\gs-agent.exe "$DistDir\gateway\gs-agent\"
+Copy-Item gs-agent\src "$DistDir\gateway\gs-agent\src" -Recurse
+Copy-Item gs-agent\programs "$DistDir\gateway\gs-agent\programs" -Recurse
+Copy-Item gs-agent\main.gs "$DistDir\gateway\gs-agent\"
+Copy-Item gs-agent\gateway-task.gs "$DistDir\gateway\gs-agent\"
+Copy-Item gs-agent\project.toml "$DistDir\gateway\gs-agent\"
+Copy-Item gs-agent\agent.example.toml "$DistDir\gateway\gs-agent\"
+New-Item -ItemType Directory -Path "$DistDir\gateway\gs-agent\workspace" | Out-Null
+
+# Write gateway config in the directory that gs-gateway.exe uses as cwd.
+$GatewayConfig = @"
+[gateway]
+port = 18878
+dataDir = ".gateway"
+database = ".gateway/gateway.db"
+agentRoot = "./gs-agent"
+
+[im]
+enabled = true
+
+[scheduler]
+enabled = true
+"@
+Write-Utf8NoBom "$DistDir\gateway\gateway.toml" $GatewayConfig
 
 # Try to copy desktop if exists
 $DesktopPaths = @(
@@ -87,14 +114,38 @@ if (-not $desktopFound) {
 # Create start scripts
 @"
 @echo off
-start /B gs-gateway.exe
+pushd "%~dp0gateway"
+start /B gs-gateway.exe --timeout 0
+popd
 timeout /t 2 /nobreak >nul
 if exist desktop.exe (
-    start desktop.exe
+    start "" "%~dp0desktop.exe"
 ) else (
     echo Desktop.exe not found
 )
 "@ | Out-File -FilePath "$DistDir\start.bat" -Encoding ASCII
+
+@"
+`$ErrorActionPreference = "Stop"
+`$Root = Split-Path -Parent `$MyInvocation.MyCommand.Path
+`$GatewayDir = Join-Path `$Root "gateway"
+`$GatewayExe = Join-Path `$GatewayDir "gs-gateway.exe"
+`$DesktopExe = Join-Path `$Root "desktop.exe"
+
+if (!(Test-Path -LiteralPath `$GatewayExe)) {
+  throw "Gateway executable not found: `$GatewayExe"
+}
+
+`$Existing = Get-NetTCPConnection -LocalPort 18878 -State Listen -ErrorAction SilentlyContinue
+if (!`$Existing) {
+  Start-Process -FilePath `$GatewayExe -ArgumentList "--timeout","0" -WorkingDirectory `$GatewayDir -WindowStyle Hidden
+  Start-Sleep -Seconds 2
+}
+
+if (Test-Path -LiteralPath `$DesktopExe) {
+  Start-Process -FilePath `$DesktopExe -WorkingDirectory `$Root
+}
+"@ | Out-File -FilePath "$DistDir\start.ps1" -Encoding UTF8
 
 # Create README
 @"
@@ -102,27 +153,25 @@ GTS System - Release Package
 =============================
 
 Files:
-- gs-agent.exe          Agent executable
-- gs-gateway.exe        Gateway executable
-- desktop.exe           Desktop application
-- config/               Configuration templates
+- desktop.exe                   Desktop application
+- gateway/gs-gateway.exe        Gateway executable
+- gateway/gateway.toml          Gateway configuration
+- gateway/gs-agent/             Agent runtime used by gateway
 
 Quick Start:
 1. Configure Agent API Key:
-   copy config\agent.example.toml config\agent.local.toml
-   notepad config\agent.local.toml
-   (Fill in your Anthropic API key)
+   copy gateway\gs-agent\agent.example.toml gateway\gs-agent\agent.toml
+   notepad gateway\gs-agent\agent.toml
 
 2. Run:
    start.bat
 
 Configuration:
-- Gateway config: config\gateway.example.toml
-- Agent config: config\agent.example.toml
+- Gateway config: gateway\gateway.toml
+- Agent config: gateway\gs-agent\agent.toml
 
 Environment Variables:
   GATEWAY_PORT=18878       Gateway port
-  TASK_TIMEOUT=30000       Task timeout (ms)
 
 Version: 1.0.0
 "@ | Out-File -FilePath "$DistDir\README.txt" -Encoding UTF8

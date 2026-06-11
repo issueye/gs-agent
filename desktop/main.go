@@ -44,9 +44,9 @@ func main() {
 		Title:     appName,
 		Frameless: true,
 		MinWidth:  1315,
-		MinHeight: 1160,
+		MinHeight: 890,
 		Width:     1315,
-		Height:    1160,
+		Height:    890,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,

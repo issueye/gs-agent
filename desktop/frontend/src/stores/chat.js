@@ -84,7 +84,8 @@ export const useChatStore = defineStore('chat', {
       }
 
       if (this.isStreaming(targetConversationId)) {
-        return
+        this.error = '请等待当前回复完成'
+        throw new Error('请等待当前回复完成')
       }
 
       conversationsStore.appendLocalUserMessage(targetConversationId, content)
@@ -335,7 +336,11 @@ export const useChatStore = defineStore('chat', {
       if (socket) {
         socketsByConversationId.delete(conversationId)
         if (closeSocket) {
-          socket.close()
+          try {
+            socket.close()
+          } catch (err) {
+            console.warn('Socket close error:', err)
+          }
         }
       }
     },

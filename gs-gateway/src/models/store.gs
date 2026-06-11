@@ -264,14 +264,18 @@ export function openGatewayStore(databaseFile) {
       return undefined;
     }
     let status = patch.status || existing.status;
+    let payload = existing.payload || {};
+    if ("payload" in patch) {
+      payload = patch.payload || {};
+    }
     let result = existing.result || {};
     if ("result" in patch) {
       result = patch.result;
     }
     let updatedAt = now();
     conn.exec(
-      "update gateway_tasks set status = ?, result = ?, updated_at = ? where id = ?",
-      [status, jsonText(result), updatedAt, id]
+      "update gateway_tasks set status = ?, payload = ?, result = ?, updated_at = ? where id = ?",
+      [status, jsonText(payload), jsonText(result), updatedAt, id]
     );
     return getTask(id);
   }
@@ -754,6 +758,25 @@ export function openGatewayStore(databaseFile) {
     return existing;
   }
 
+  function hasObjectFields(value) {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+    for (let key in value) {
+      return true;
+    }
+    return false;
+  }
+
+  function hasGatewayTaskToolCall(toolCalls, taskId) {
+    for (let tc of toolCalls || []) {
+      if (String(tc.id || "") === String(taskId || "")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function listIMConversationMessages(id) {
     let conversation = getIMConversation(id);
     if (!conversation) {
@@ -781,6 +804,9 @@ export function openGatewayStore(databaseFile) {
       }
 
       let text = String(input.text || im.text || "");
+      let result = task.result || {};
+      let answer = String(result.answer || "");
+      let toolCalls = payload.tool_calls || [];
       if (text !== "") {
         messages.push({
           id: task.id + ":user",
@@ -793,27 +819,44 @@ export function openGatewayStore(databaseFile) {
         });
       }
 
-      messages.push({
-        id: task.id + ":tool",
-        role: "assistant",
-        content: "",
-        tool_calls: [{
-          ID: task.id,
-          Name: "agent.im",
-          Title: "网关任务",
-          Kind: String(task.kind || "agent.im"),
-          Status: task.status,
-          Arguments: text,
-          Result: task.result || {},
-        }],
-        metadata: {
-          taskId: task.id,
-        },
-        created_at: task.created_at,
-      });
+      if (!hasGatewayTaskToolCall(toolCalls, task.id)) {
+        messages.push({
+          id: task.id + ":tool",
+          role: "assistant",
+          content: "",
+          tool_calls: [{
+            ID: String(task.id || ""),
+            Name: String(task.kind || "agent.im"),
+            Title: "网关任务",
+            Kind: String(task.kind || "agent.im"),
+            Status: String(task.status || "pending"),
+            Arguments: text,
+            Result: hasObjectFields(result) ? result : "",
+          }],
+          metadata: { taskId: task.id },
+          created_at: task.created_at,
+        });
+      }
 
-      let result = task.result || {};
-      let answer = String(result.answer || "");
+      for (let tc of toolCalls) {
+        messages.push({
+          id: task.id + ":tool:" + String(tc.id || ""),
+          role: "assistant",
+          content: "",
+          tool_calls: [{
+            ID: String(tc.id || ""),
+            Name: String(tc.name || "tool"),
+            Title: String(tc.title || tc.name || "工具"),
+            Kind: String(tc.kind || tc.name || "tool"),
+            Status: String(tc.status || "completed"),
+            Arguments: tc.arguments || "",
+            Result: tc.result || "",
+          }],
+          metadata: { taskId: task.id },
+          created_at: task.created_at,
+        });
+      }
+
       if (answer !== "") {
         messages.push({
           id: task.id + ":assistant",

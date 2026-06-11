@@ -1,18 +1,15 @@
-import { createGatewayModel } from "@/models/gateway";
-import { openGatewayStore } from "@/models/store";
-import { config } from "@/lib/config";
+import { loadConfig } from "@/config";
+import { createApp } from "@/app";
 
-let store = openGatewayStore("./data/gateway.db");
-let gateway = createGatewayModel(store);
+let config = loadConfig();
+let app = createApp(config);
+let server = app.listen(config.gateway.port);
 
 console.log("=== GS Gateway ===");
 console.log("Version: 1.0.0");
-console.log("Host:", config.gateway.host);
-console.log("Port:", config.gateway.port);
-console.log("Timeout:", config.gateway.timeout, "ms");
-console.log("Starting...");
-
-gateway.listen(config.gateway.host, config.gateway.port);
-
+console.log("Port:", server.port);
+console.log("Database:", config.gateway.database);
+console.log("Agent root:", config.gateway.agentRoot);
 console.log("Gateway is ready!");
-console.log("WebSocket endpoint: ws://" + config.gateway.host + ":" + String(config.gateway.port) + "/ws/chat");
+console.log("Health endpoint: http://127.0.0.1:" + String(server.port) + "/health");
+console.log("WebSocket endpoint: ws://127.0.0.1:" + String(server.port) + "/ws/chat");

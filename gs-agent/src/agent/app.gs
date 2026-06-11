@@ -320,6 +320,12 @@ export function loadAgentApp(root, options) {
   let skills = discoverSkills(root, agent);
   let system = applySkillsToSystem(agent.system, skills);
   let workspace = path.join(root, "workspace");
+  if (options.workspace) {
+    if (!path.isAbs(options.workspace)) {
+      throw new Error("workspace must be an absolute path: " + options.workspace);
+    }
+    workspace = options.workspace;
+  }
   let session = undefined;
   if (options.session) {
     session = resolveAgentSession(root, options.session);
@@ -531,6 +537,7 @@ export function runAgentApp(options) {
   }
   let app = loadAgentApp(options.root, {
     session: options.session,
+    workspace: options.workspace,
   });
   return runAgentTask({
     app: app,

@@ -4,17 +4,20 @@ let cli = require("@std/cli");
 
 function runMain(cmd, args) {
   let session = cmd.flag("session");
+  let workspace = cmd.flag("workspace");
   if (cmd.flag("tui")) {
     let tui = require("@/tui/app");
     let runAgentTui = tui.runAgentTui;
     runAgentTui({
       session: session,
+      workspace: workspace,
     });
     return;
   }
 
   let result = runAgentApp({
     session: session,
+    workspace: workspace,
   });
 
   println(result.answer);
@@ -34,5 +37,6 @@ function main() {
   });
   root.flags().bool("tui", "", false, "run the terminal UI");
   root.flags().string("session", "s", "", "continue a session by id, directory, session.jsonl path, or current");
+  root.flags().string("workspace", "w", "", "specify workspace directory (default: workspace)");
   root.execute();
 }

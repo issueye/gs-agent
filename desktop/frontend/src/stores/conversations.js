@@ -244,7 +244,6 @@ export const useConversationsStore = defineStore('conversations', {
 
     markAssistantDraftComplete(conversationId) {
       const messages = this.ensureMessageBuffer(conversationId)
-      removeEmptyAssistantMessages(messages)
       for (const draft of messages.filter((message) => message.role === 'assistant' && message.draft)) {
         draft.draft = false
       }

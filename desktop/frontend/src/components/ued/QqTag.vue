@@ -12,8 +12,8 @@ const toneMap = {
   default: 'border-[color:var(--qq-border)] bg-white/70 text-[color:var(--qq-text-secondary)]',
   accent: 'border-transparent bg-[rgba(0,136,255,0.12)] text-[color:var(--qq-accent-strong)]',
   pink: 'border-transparent bg-[rgba(124,58,237,0.12)] text-[color:var(--qq-accent-pink)]',
-  warning: 'border-transparent bg-[rgba(217,119,6,0.14)] text-[#8a4b05]',
-  success: 'border-transparent bg-[rgba(16,185,129,0.14)] text-[#047857]',
+  warning: 'border-transparent bg-[var(--status-warning-bg)] text-[var(--color-warning)]',
+  success: 'border-transparent bg-[var(--status-success-bg)] text-[var(--color-success)]',
 }
 
 const classes = computed(() => toneMap[props.tone] || toneMap.default)

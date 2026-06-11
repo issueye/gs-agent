@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { SendHorizonal, Square } from 'lucide-vue-next'
 import QqButton from '@/components/ued/QqButton.vue'
 
@@ -24,14 +24,24 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'send', 'cancel'])
 const canSubmit = computed(() => !props.disabled && props.modelValue.trim() && !props.busy)
+const sending = ref(false)
 
 function handleKeydown(event) {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    if (canSubmit.value) {
-      emit('send')
+    if (canSubmit.value && !sending.value) {
+      handleSend()
     }
   }
+}
+
+function handleSend() {
+  if (!canSubmit.value || sending.value) return
+  sending.value = true
+  emit('send')
+  setTimeout(() => {
+    sending.value = false
+  }, 300)
 }
 </script>
 
@@ -65,9 +75,9 @@ function handleKeydown(event) {
             停止
           </QqButton>
           <QqButton
-            :disabled="!canSubmit"
+            :disabled="!canSubmit || sending"
             data-testid="chat-composer-send"
-            @click="emit('send')"
+            @click="handleSend"
           >
             <SendHorizonal class="h-4 w-4" />
             发送

@@ -16,6 +16,17 @@ function mergeObject(base, extra) {
   return out;
 }
 
+function parsePort(value, fallback) {
+  if (!value) {
+    return fallback;
+  }
+  let port = parseInt(value);
+  if (isNaN(port) || port <= 0) {
+    return fallback;
+  }
+  return port;
+}
+
 export function defaultConfig() {
   return {
     gateway: {
@@ -44,6 +55,7 @@ export function loadConfig() {
     cfg.scheduler = mergeObject(cfg.scheduler, parsed.scheduler);
   }
 
+  cfg.gateway.port = parsePort(process.env.GATEWAY_PORT, cfg.gateway.port);
   cfg.root = root;
   cfg.gateway.dataDir = path.resolve(path.join(root, cfg.gateway.dataDir));
   cfg.gateway.database = path.resolve(path.join(root, cfg.gateway.database));

@@ -39,7 +39,7 @@ const sizeClassMap = {
 
 const classes = computed(() => [
   'inline-flex items-center justify-center gap-2 border font-medium transition duration-150 ease-out',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(0,136,255,0.22)]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
   'disabled:cursor-not-allowed disabled:opacity-55',
   variantClassMap[props.variant] || variantClassMap.primary,
   sizeClassMap[props.size] || sizeClassMap.md,

@@ -285,26 +285,114 @@ export function createAnthropicProvider(options) {
     throw lastErr;
   }
 
-  function deltaTextFromEvent(event) {
+  function payloadFromEvent(event) {
     if (!event || !event.data) {
-      return "";
+      return undefined;
     }
     let data = String(event.data || "");
     if (data === "[DONE]") {
-      return "";
+      return undefined;
     }
-    let payload = {};
     try {
-      payload = JSON.parse(data);
+      return JSON.parse(data);
     } catch (error) {
-      return "";
+      return undefined;
     }
-    if (payload.type === "content_block_delta") {
-      if (payload.delta && payload.delta.text) {
-        return String(payload.delta.text);
+  }
+
+  function streamBlockFromStart(payload) {
+    let block = payload.content_block || {};
+    if (block.type === "tool_use") {
+      return {
+        type: "tool_use",
+        id: block.id,
+        name: block.name,
+        input: block.input || {},
+        inputJson: "",
+      };
+    }
+    if (block.type === "text") {
+      return {
+        type: "text",
+        text: String(block.text || ""),
+      };
+    }
+    if (block.type === "thinking") {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  function ensureTextBlock(blocks) {
+    let last = blocks.length > 0 ? blocks[blocks.length - 1] : undefined;
+    if (last && last.type === "text") {
+      return last;
+    }
+    let block = {
+      type: "text",
+      text: "",
+    };
+    blocks.push(block);
+    return block;
+  }
+
+  function ensureTextBlockAt(blocks, index) {
+    if (index === undefined || index === null || index < 0) {
+      let block = {
+        type: "text",
+        text: "",
+      };
+      blocks.push(block);
+      return block;
+    }
+    let block = blocks[index];
+    if (block) {
+      if (block.type === "text") {
+        return block;
       }
     }
-    return "";
+    block = {
+      type: "text",
+      text: "",
+    };
+    blocks[index] = block;
+    return block;
+  }
+    return block;
+  }
+
+  function finishStreamBlocks(blocks) {
+    let out = [];
+    for (let block of blocks) {
+      if (block.type === "tool_use") {
+        let input = block.input || {};
+        if (block.inputJson && block.inputJson !== "") {
+          try {
+            input = JSON.parse(block.inputJson);
+          } catch (error) {
+            input = {};
+          }
+        }
+        out.push({
+          type: "tool_use",
+          id: block.id,
+          name: block.name,
+          input: input,
+        });
+      } else if (block.type === "text") {
+        out.push({
+          type: "text",
+          text: String(block.text || ""),
+        });
+      }
+    }
+    if (out.length === 0) {
+      out.push({
+        type: "text",
+        text: "",
+      });
+    }
+    return out;
   }
 
   function requestStream(body, url) {
@@ -333,19 +421,50 @@ export function createAnthropicProvider(options) {
 
     let reader = sse.reader(response.body);
     let text = "";
+    let blocks = [];
     while (true) {
       let event = reader.next();
       if (event === null) {
         break;
       }
-      let delta = deltaTextFromEvent(event);
-      if (delta !== "") {
-        text = text + delta;
+      let payload = payloadFromEvent(event);
+      if (!payload) {
+        continue;
+      }
+      if (payload.type === "content_block_start") {
+        let started = streamBlockFromStart(payload);
+        if (started) {
+          blocks[payload.index] = started;
+        }
+        continue;
+      }
+      if (payload.type !== "content_block_delta") {
+        continue;
+      }
+
+      let index = payload.index;
+      let delta = payload.delta || {};
+      if (delta.text) {
+        let textDelta = String(delta.text);
+        text = text + textDelta;
+        let block = blocks[index];
+        if (!block) {
+          block = ensureTextBlockAt(blocks, index);
+        }
+        block.text = String(block.text || "") + textDelta;
         if (options.onDelta) {
           options.onDelta({
-            text: delta,
+            text: textDelta,
             content: text,
           });
+        }
+      } else if (delta.partial_json) {
+        let toolBlock = blocks[index];
+        if (!toolBlock) {
+          toolBlock = ensureTextBlockAt(blocks, index);
+        }
+        if (toolBlock.type === "tool_use") {
+          toolBlock.inputJson = String(toolBlock.inputJson || "") + String(delta.partial_json);
         }
       }
     }
@@ -353,12 +472,7 @@ export function createAnthropicProvider(options) {
       response.close();
     }
     return {
-      content: [
-        {
-          type: "text",
-          text: text,
-        },
-      ],
+      content: finishStreamBlocks(blocks),
     };
   }
 

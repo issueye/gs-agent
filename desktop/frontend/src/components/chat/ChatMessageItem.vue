@@ -4,415 +4,162 @@ import { renderMarkdown } from '@/services/utils/markdown'
 import { CheckCircle2, ChevronDown, ChevronRight, LoaderCircle, Terminal, XCircle } from 'lucide-vue-next'
 
 const props = defineProps({
-  message: {
-    type: Object,
-    required: true,
-  },
-  showTimestamps: {
-    type: Boolean,
-    default: true,
-  },
+  message: { type: Object, required: true },
+  showTimestamps: { type: Boolean, default: true },
 })
 
-const renderedContent = computed(() => renderMarkdown(props.message.content))
-const toolMetadata = computed(() => props.message.metadata || {})
-const isToolMessage = computed(() => props.message.role === 'tool' || Boolean(toolMetadata.value.toolCallId))
-const toolSummary = computed(() => compactToolSummary(toolMetadata.value))
-const toolLabel = computed(() => {
-  const meta = toolMetadata.value
-  if (!meta.toolCallId && !meta.toolStatus && !meta.toolKind) {
-    return ''
-  }
-  return [toolKindLabel(meta.toolKind), toolStatusLabel(meta.toolStatus)].filter(Boolean).join(' · ')
+const LABELS = {
+  kind: { search: '搜索', read: '读取', edit: '修改', execute: '执行', fetch: '获取', 'agent.im': '网关' },
+  status: { running: '运行中', pending: '运行中', in_progress: '运行中', completed: '已完成', failed: '失败', cancelled: '已取消' },
+  role: { user: '你', assistant: '助手', tool: '工具' },
+}
+
+const meta = computed(() => props.message.metadata || {})
+const isTool = computed(() => props.message.role === 'tool' || meta.value.toolCallId)
+const toolExpanded = ref(false)
+
+const rendered = computed(() => renderMarkdown(props.message.content))
+const roleLabel = computed(() => LABELS.role[isTool.value ? 'tool' : props.message.role] || props.message.role)
+const kindLabel = computed(() => LABELS.kind[meta.value.toolKind] || meta.value.toolKind || '工具')
+const statusLabel = computed(() => LABELS.status[meta.value.toolStatus] || meta.value.toolStatus)
+const toolTitle = computed(() => meta.value.toolTitle || kindLabel.value)
+
+const icon = computed(() => {
+  const status = meta.value.toolStatus
+  if (status === 'completed') return { component: CheckCircle2, class: 'text-emerald-600' }
+  if (status === 'failed' || status === 'cancelled') return { component: XCircle, class: 'text-red-600' }
+  return { component: LoaderCircle, class: 'animate-spin text-[var(--qq-accent)]' }
 })
 
-const usageLabel = computed(() => {
-  const usage = toolMetadata.value.usage
-  if (!usage) {
-    return ''
-  }
+const usage = computed(() => {
+  const u = meta.value.usage
+  if (!u) return ''
   const parts = []
-  if (Number.isFinite(usage.inputTokens)) parts.push(`in ${usage.inputTokens}`)
-  if (Number.isFinite(usage.outputTokens)) parts.push(`out ${usage.outputTokens}`)
-  if (Number.isFinite(usage.totalTokens)) parts.push(`total ${usage.totalTokens}`)
+  if (u.inputTokens) parts.push(`in ${u.inputTokens}`)
+  if (u.outputTokens) parts.push(`out ${u.outputTokens}`)
   return parts.join(' · ')
 })
 
-const messageShellClass = computed(() => {
-  if (props.message.role === 'user') return 'message-shell--user'
-  if (isToolMessage.value) return 'message-shell--tool'
-  return 'message-shell--assistant'
-})
-const statusLabel = computed(() => props.message.draft ? '生成中' : '')
-const toolStatus = computed(() => toolMetadata.value.toolStatus || '')
-const toolIcon = computed(() => {
-  if (toolStatus.value === 'completed') return CheckCircle2
-  if (toolStatus.value === 'failed' || toolStatus.value === 'cancelled') return XCircle
-  return LoaderCircle
-})
-const toolIconClass = computed(() => {
-  if (toolStatus.value === 'completed') return 'text-emerald-600'
-  if (toolStatus.value === 'failed' || toolStatus.value === 'cancelled') return 'text-red-600'
-  return 'animate-spin text-[var(--qq-accent)]'
-})
-const isFinalToolStatus = computed(() => ['completed', 'failed', 'cancelled'].includes(toolStatus.value))
-const toolExpanded = ref(false)
-const shouldShowMessageBody = computed(() => !isToolMessage.value || toolExpanded.value)
-const toolToggleLabel = computed(() => toolExpanded.value ? '收起' : '展开')
-
-watch(
-  () => `${props.message.id}:${toolStatus.value}:${isToolMessage.value}`,
-  () => {
-    toolExpanded.value = false
-  },
-)
-
-function roleLabel(role) {
-  if (isToolMessage.value) {
-    return '工具'
-  }
-  return role === 'user' ? '你' : '助手'
-}
-
-function formatTimestamp(value) {
-  if (!value) {
-    return ''
-  }
-  return new Date(value).toLocaleTimeString()
-}
-
-function toolKindLabel(kind) {
-  const value = String(kind || '').trim()
-  if (value === 'search') return '搜索'
-  if (value === 'read') return '读取'
-  if (value === 'edit') return '修改'
-  if (value === 'execute') return '执行'
-  if (value === 'fetch') return '获取'
-  if (value === 'agent.im') return '网关'
-  if (value === 'tool_call') return '工具'
-  return value || '工具'
-}
-
-function toolStatusLabel(status) {
-  const value = String(status || '').trim()
-  if (value === 'running' || value === 'pending' || value === 'in_progress') return '运行中'
-  if (value === 'completed') return '已完成'
-  if (value === 'failed') return '失败'
-  if (value === 'cancelled') return '已取消'
-  return value
-}
-
-function compactToolSummary(meta = {}) {
-  const input = meta.rawInput
-  if (!input) {
-    return ''
-  }
-  if (typeof input === 'string') {
-    return input.length > 80 ? `${input.slice(0, 80)}...` : input
-  }
-  if (input.query) {
-    return `查询：${input.query}`
-  }
-  if (input.path) {
-    return `路径：${input.path}`
-  }
-  if (input.command) {
-    return `命令：${input.command}`
-  }
+const inputSummary = computed(() => {
+  const input = meta.value.rawInput
+  if (!input) return ''
+  if (typeof input === 'string') return input.slice(0, 80) + (input.length > 80 ? '...' : '')
+  if (input.query) return `查询：${input.query}`
+  if (input.path) return `路径：${input.path}`
+  if (input.command) return `命令：${input.command}`
   return ''
-}
+})
+
+watch(() => props.message.id, () => { toolExpanded.value = false })
 </script>
 
 <template>
-  <article
-    class="flex"
-    :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
-    :data-testid="`chat-message-${message.role}`"
-  >
-    <div class="message-shell" :class="messageShellClass">
-      <header
-        v-if="!isToolMessage"
-        class="mb-1 flex items-center gap-2"
-        :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
-      >
-        <span
-          class="inline-flex rounded-lg px-2 py-0.5 text-[11px] uppercase"
-          :class="
-            message.role === 'user'
-              ? 'bg-[rgba(15,23,42,0.08)] text-[color:var(--qq-text-secondary)]'
-              : 'bg-[rgba(0,136,255,0.12)] text-[var(--qq-accent)]'
-          "
-        >
-          {{ roleLabel(message.role) }}
-        </span>
-        <span v-if="message.draft" class="text-xs text-[color:var(--qq-text-tertiary)]">生成中</span>
-        <span
-          v-if="toolLabel && !isToolMessage"
-          class="inline-flex items-center gap-1 rounded-lg bg-white/70 px-2 py-0.5 text-[11px] text-[color:var(--qq-text-secondary)]"
-        >
-          <LoaderCircle class="h-3 w-3 animate-spin" />
-          {{ toolLabel }}
-        </span>
-        <span v-if="usageLabel" class="text-xs text-[color:var(--qq-text-tertiary)]">{{ usageLabel }}</span>
-        <span v-if="statusLabel" class="text-xs text-[color:var(--qq-text-tertiary)]">{{ statusLabel }}</span>
-        <time v-if="showTimestamps" class="text-xs text-[color:var(--qq-text-tertiary)]">
-          {{ formatTimestamp(message.createdAt) }}
+  <article class="flex" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
+    <div class="message-shell" :class="`message-shell--${isTool ? 'tool' : message.role}`">
+      <header v-if="!isTool" class="mb-1 flex items-center gap-2" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
+        <span class="role-badge" :class="`role-badge--${message.role}`">{{ roleLabel }}</span>
+        <span v-if="message.draft" class="text-xs text-[var(--qq-text-tertiary)]">生成中</span>
+        <span v-if="usage" class="text-xs text-[var(--qq-text-tertiary)]">{{ usage }}</span>
+        <time v-if="showTimestamps" class="text-xs text-[var(--qq-text-tertiary)]">
+          {{ message.createdAt ? new Date(message.createdAt).toLocaleTimeString() : '' }}
         </time>
       </header>
 
-      <div
-        class="border px-3 py-2"
-        :class="[
-          message.role === 'user' ? 'border-transparent bg-[color:var(--qq-user-bubble)]' : 'border-[color:var(--qq-border)] bg-white/82',
-          isToolMessage ? 'border-[rgba(0,136,255,0.22)] bg-[rgba(237,243,255,0.72)]' : '',
-        ]"
-        style="border-radius: 10px;"
-      >
-        <button
-          v-if="isToolMessage"
-          type="button"
-          class="tool-message-toggle flex w-full items-center gap-2 rounded-lg text-left text-xs text-[color:var(--qq-text-secondary)]"
-          :class="shouldShowMessageBody ? 'mb-2' : ''"
-          :aria-expanded="toolExpanded"
-          @click="toolExpanded = !toolExpanded"
-        >
-          <component :is="toolIcon" class="h-3.5 w-3.5 shrink-0" :class="toolIconClass" />
-          <Terminal class="h-3.5 w-3.5 shrink-0 text-[color:var(--qq-text-tertiary)]" />
-          <span class="min-w-0 flex-1 truncate font-medium text-[color:var(--qq-text-primary)]">
-            {{ toolMetadata.toolTitle || toolMetadata.toolKind || '工具调用' }}
-          </span>
-          <span v-if="toolSummary" class="hidden min-w-0 flex-1 truncate sm:inline">{{ toolSummary }}</span>
-          <span v-if="toolMetadata.toolStatus" class="shrink-0">· {{ toolStatusLabel(toolMetadata.toolStatus) }}</span>
-          <time v-if="showTimestamps" class="shrink-0 text-[11px] text-[color:var(--qq-text-tertiary)]">
-            {{ formatTimestamp(message.createdAt) }}
+      <div class="message-bubble" :class="[`message-bubble--${message.role}`, isTool && 'message-bubble--tool']">
+        <button v-if="isTool" type="button" class="tool-toggle" :class="toolExpanded && 'mb-2'" @click="toolExpanded = !toolExpanded">
+          <component :is="icon.component" class="h-3.5 w-3.5 shrink-0" :class="icon.class" />
+          <Terminal class="h-3.5 w-3.5 shrink-0 text-[var(--qq-text-tertiary)]" />
+          <span class="min-w-0 flex-1 truncate font-medium text-[var(--qq-text-primary)]">{{ toolTitle }}</span>
+          <span v-if="inputSummary" class="hidden min-w-0 flex-1 truncate sm:inline">{{ inputSummary }}</span>
+          <span v-if="statusLabel" class="shrink-0">· {{ statusLabel }}</span>
+          <time v-if="showTimestamps" class="shrink-0 text-[11px] text-[var(--qq-text-tertiary)]">
+            {{ message.createdAt ? new Date(message.createdAt).toLocaleTimeString() : '' }}
           </time>
-          <span class="tool-message-toggle__label inline-flex shrink-0 items-center gap-1">
+          <span class="tool-toggle-btn">
             <component :is="toolExpanded ? ChevronDown : ChevronRight" class="h-3.5 w-3.5" />
-            {{ toolToggleLabel }}
+            {{ toolExpanded ? '收起' : '展开' }}
           </span>
         </button>
-        <div
-          v-if="shouldShowMessageBody"
-          class="markdown-body text-sm leading-7"
-          :class="message.error ? 'text-red-700' : 'text-[color:var(--qq-text-primary)]'"
-          v-html="renderedContent"
-        />
-        <div
-          v-if="shouldShowMessageBody && (isToolMessage || usageLabel)"
-          class="mt-2 border-t border-[color:var(--qq-border)] pt-2 text-xs text-[color:var(--qq-text-tertiary)]"
-        >
-          <span v-if="isToolMessage" class="mr-3">{{ toolKindLabel(toolMetadata.toolKind) }} · {{ toolStatusLabel(toolMetadata.toolStatus || 'pending') }}</span>
-          <span v-if="usageLabel">用量 {{ usageLabel }}</span>
-        </div>
+        <div v-if="!isTool || toolExpanded" class="markdown-body" :class="message.error && 'text-red-700'" v-html="rendered" />
       </div>
     </div>
   </article>
 </template>
 
 <style scoped>
-.markdown-body {
-  overflow-wrap: anywhere;
-}
+.message-shell { max-width: min(920px, 84%); }
+.message-shell--user { max-width: min(720px, 72%); }
+.message-shell--tool { max-width: min(760px, 80%); }
 
-.message-shell {
-  max-width: min(920px, 84%);
+.role-badge {
+  display: inline-flex;
+  border-radius: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 11px;
+  text-transform: uppercase;
 }
+.role-badge--user { background: rgba(15,23,42,0.08); color: var(--qq-text-secondary); }
+.role-badge--assistant { background: rgba(0,136,255,0.12); color: var(--qq-accent); }
 
-.message-shell--user {
-  max-width: min(720px, 72%);
+.message-bubble {
+  border: 1px solid var(--qq-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255,255,255,0.82);
 }
+.message-bubble--user { border-color: transparent; background: var(--qq-user-bubble); }
+.message-bubble--tool { border-color: var(--tool-message-border); background: var(--tool-message-bg); }
 
-.message-shell--tool {
-  max-width: min(760px, 80%);
+.tool-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  text-align: left;
+  font-size: 12px;
+  color: var(--qq-text-secondary);
+  transition: background-color 160ms, color 160ms;
 }
+.tool-toggle:hover { background: rgba(15,23,42,0.055); color: var(--qq-text-primary); }
+.tool-toggle:focus-visible { outline: 1px solid rgba(0,136,255,0.42); outline-offset: 2px; }
 
-.tool-message-toggle {
-  transition:
-    background-color 160ms ease,
-    color 160ms ease;
-}
-
-.tool-message-toggle:hover {
-  background: rgba(15, 23, 42, 0.055);
-  color: var(--qq-text-primary);
-}
-
-.tool-message-toggle:focus-visible {
-  outline: 1px solid rgba(0, 136, 255, 0.42);
-  outline-offset: 2px;
-}
-
-.tool-message-toggle__label {
+.tool-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
   border: 1px solid var(--qq-border);
   border-radius: 8px;
   padding: 0.12rem 0.4rem;
   color: var(--qq-text-secondary);
 }
 
-.markdown-body :deep(p),
-.markdown-body :deep(ul),
-.markdown-body :deep(ol),
-.markdown-body :deep(blockquote),
-.markdown-body :deep(pre),
-.markdown-body :deep(.markdown-table-scroll) {
-  margin: 0.7rem 0;
-}
-
-.markdown-body :deep(p:first-child),
-.markdown-body :deep(ul:first-child),
-.markdown-body :deep(ol:first-child),
-.markdown-body :deep(blockquote:first-child),
-.markdown-body :deep(pre:first-child),
-.markdown-body :deep(.markdown-table-scroll:first-child) {
-  margin-top: 0;
-}
-
-.markdown-body :deep(p:last-child),
-.markdown-body :deep(ul:last-child),
-.markdown-body :deep(ol:last-child),
-.markdown-body :deep(blockquote:last-child),
-.markdown-body :deep(pre:last-child),
-.markdown-body :deep(.markdown-table-scroll:last-child) {
-  margin-bottom: 0;
-}
-
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3),
-.markdown-body :deep(h4) {
-  margin: 1rem 0 0.45rem;
-  color: var(--qq-text-primary);
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.markdown-body :deep(h1) {
-  font-size: 1.35rem;
-}
-
-.markdown-body :deep(h2) {
-  font-size: 1.15rem;
-}
-
-.markdown-body :deep(h3) {
-  font-size: 1rem;
-}
-
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) {
-  padding-left: 1.25rem;
-}
-
-.markdown-body :deep(ul) {
-  list-style: disc;
-}
-
-.markdown-body :deep(ol) {
-  list-style: decimal;
-}
-
-.markdown-body :deep(li + li) {
-  margin-top: 0.25rem;
-}
-
-.markdown-body :deep(strong) {
-  color: var(--qq-text-primary);
-  font-weight: 700;
-}
-
-.markdown-body :deep(a) {
-  color: var(--qq-accent);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.markdown-body :deep(.markdown-table-scroll) {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  border: 1px solid var(--qq-border);
-  border-radius: 12px;
-  background:
-    linear-gradient(90deg, rgba(0, 136, 255, 0.06), transparent 35%),
-    rgba(255, 255, 255, 0.72);
-}
-
-.markdown-body :deep(table) {
-  width: 100%;
-  min-width: max-content;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.markdown-body :deep(thead) {
-  background: rgba(244, 247, 252, 0.96);
-}
-
-.markdown-body :deep(th),
-.markdown-body :deep(td) {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  border-right: 1px solid rgba(15, 23, 42, 0.06);
-  padding: 0.55rem 0.75rem;
-  text-align: left;
-  vertical-align: top;
-  white-space: normal;
-  word-break: break-word;
-}
-
-.markdown-body :deep(th:last-child),
-.markdown-body :deep(td:last-child) {
-  border-right: 0;
-}
-
-.markdown-body :deep(th) {
-  color: var(--qq-text-secondary);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.markdown-body :deep(td) {
-  color: var(--qq-text-primary);
-}
-
-.markdown-body :deep(tbody tr:last-child td) {
-  border-bottom: 0;
-}
-
-.markdown-body :deep(tbody tr:hover) {
-  background: rgba(15, 23, 42, 0.04);
-}
-
-.markdown-body :deep(table code) {
-  white-space: nowrap;
-}
-
-.markdown-body :deep(code) {
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 8px;
-  background: rgba(242, 244, 248, 0.92);
-  padding: 0.1rem 0.32rem;
-  color: var(--qq-text-primary);
-  font-size: 0.9em;
-}
-
-.markdown-body :deep(pre) {
-  overflow-x: auto;
-  border: 1px solid var(--qq-border);
-  border-radius: 12px;
-  background: rgba(247, 249, 252, 0.96);
-  padding: 0.8rem;
-}
-
-.markdown-body :deep(pre code) {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: inherit;
-}
-
-.markdown-body :deep(blockquote) {
-  border-left: 3px solid var(--qq-accent);
-  padding-left: 0.8rem;
-  color: var(--qq-text-secondary);
-}
+.markdown-body { overflow-wrap: anywhere; font-size: 14px; line-height: 1.75; color: var(--qq-text-primary); }
+.markdown-body :deep(p), .markdown-body :deep(ul), .markdown-body :deep(ol), .markdown-body :deep(blockquote), .markdown-body :deep(pre), .markdown-body :deep(.markdown-table-scroll) { margin: 0.7rem 0; }
+.markdown-body :deep(:first-child) { margin-top: 0; }
+.markdown-body :deep(:last-child) { margin-bottom: 0; }
+.markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3), .markdown-body :deep(h4) { margin: 1rem 0 0.45rem; font-weight: 700; line-height: 1.35; color: var(--qq-text-primary); }
+.markdown-body :deep(h1) { font-size: 1.35rem; }
+.markdown-body :deep(h2) { font-size: 1.15rem; }
+.markdown-body :deep(h3) { font-size: 1rem; }
+.markdown-body :deep(ul), .markdown-body :deep(ol) { padding-left: 1.25rem; }
+.markdown-body :deep(ul) { list-style: disc; }
+.markdown-body :deep(ol) { list-style: decimal; }
+.markdown-body :deep(li + li) { margin-top: 0.25rem; }
+.markdown-body :deep(strong) { font-weight: 700; color: var(--qq-text-primary); }
+.markdown-body :deep(a) { color: var(--qq-accent); text-decoration: underline; text-underline-offset: 3px; }
+.markdown-body :deep(code) { border: 1px solid rgba(15,23,42,0.1); border-radius: 8px; background: rgba(242,244,248,0.92); padding: 0.1rem 0.32rem; font-size: 0.9em; }
+.markdown-body :deep(pre) { overflow-x: auto; border: 1px solid var(--qq-border); border-radius: 12px; background: rgba(247,249,252,0.96); padding: 0.8rem; }
+.markdown-body :deep(pre code) { border: 0; background: transparent; padding: 0; }
+.markdown-body :deep(blockquote) { border-left: 3px solid var(--qq-accent); padding-left: 0.8rem; color: var(--qq-text-secondary); }
+.markdown-body :deep(.markdown-table-scroll) { width: 100%; overflow-x: auto; border: 1px solid var(--qq-border); border-radius: 12px; background: linear-gradient(90deg, rgba(0,136,255,0.06), transparent 35%), rgba(255,255,255,0.72); }
+.markdown-body :deep(table) { width: 100%; min-width: max-content; border-collapse: separate; border-spacing: 0; }
+.markdown-body :deep(thead) { background: rgba(244,247,252,0.96); }
+.markdown-body :deep(th), .markdown-body :deep(td) { border-bottom: 1px solid rgba(15,23,42,0.08); border-right: 1px solid rgba(15,23,42,0.06); padding: 0.55rem 0.75rem; text-align: left; vertical-align: top; white-space: normal; word-break: break-word; }
+.markdown-body :deep(th:last-child), .markdown-body :deep(td:last-child) { border-right: 0; }
+.markdown-body :deep(th) { color: var(--qq-text-secondary); font-size: 0.78rem; font-weight: 700; }
+.markdown-body :deep(tbody tr:last-child td) { border-bottom: 0; }
+.markdown-body :deep(tbody tr:hover) { background: rgba(15,23,42,0.04); }
+.markdown-body :deep(table code) { white-space: nowrap; }
 </style>

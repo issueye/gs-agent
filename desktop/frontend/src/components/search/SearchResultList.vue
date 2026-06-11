@@ -52,7 +52,7 @@ function highlightedParts(text) {
       v-for="result in results"
       :key="result.id"
       :to="`/chat/${result.conversationId}`"
-      class="block border-b border-[rgba(15,23,42,0.08)] px-4 py-4 transition last:border-b-0 hover:bg-[rgba(15,23,42,0.045)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(0,136,255,0.22)]"
+      class="block border-b border-[var(--border-subtle)] px-4 py-4 transition last:border-b-0 hover:bg-[var(--hover-overlay)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
       :data-testid="`search-result-${result.id}`"
     >
       <article class="flex gap-3">
@@ -68,7 +68,7 @@ function highlightedParts(text) {
           </div>
           <p class="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--qq-text-secondary)]">
             <template v-for="(part, index) in highlightedParts(result.excerpt)" :key="`${result.id}-${index}`">
-              <mark v-if="part.hit" class="rounded-[3px] bg-[rgba(217,119,6,0.18)] px-0.5 text-[#8a4b05]">{{ part.text }}</mark>
+              <mark v-if="part.hit" class="rounded-[3px] bg-[var(--status-warning-bg)] px-0.5 text-[var(--color-warning)]">{{ part.text }}</mark>
               <span v-else>{{ part.text }}</span>
             </template>
           </p>

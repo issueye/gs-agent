@@ -1,0 +1,51 @@
+/* Design Tokens - Single Source of Truth */
+:root {
+  /* Colors - Semantic */
+  --color-text-primary: var(--qq-text-primary);
+  --color-text-secondary: var(--qq-text-secondary);
+  --color-text-tertiary: var(--qq-text-tertiary);
+  --color-accent: var(--qq-accent);
+  --color-accent-strong: var(--qq-accent-strong);
+  --color-danger: var(--qq-danger);
+  --color-success: #047857;
+  --color-warning: #8a4b05;
+  --color-border: var(--qq-border);
+  --color-border-strong: var(--qq-border-strong);
+
+  /* Surface */
+  --surface-base: var(--qq-surface);
+  --surface-strong: var(--qq-surface-strong);
+  --surface-soft: var(--qq-surface-soft);
+
+  /* Status */
+  --status-success: #10b981;
+  --status-success-bg: rgba(16, 185, 129, 0.14);
+  --status-warning: #d97706;
+  --status-warning-bg: rgba(217, 119, 6, 0.14);
+  --status-error: #ef4444;
+  --status-error-bg: rgba(239, 68, 68, 0.14);
+
+  /* Spacing Scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.1);
+  --shadow-lg: var(--qq-shadow);
+
+  /* Interaction */
+  --focus-ring: rgba(0, 136, 255, 0.22);
+  --hover-overlay: rgba(15, 23, 42, 0.045);
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --tool-message-border: rgba(0, 136, 255, 0.22);
+  --tool-message-bg: rgba(237, 243, 255, 0.72);
+}
