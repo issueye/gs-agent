@@ -358,8 +358,6 @@ export function createAnthropicProvider(options) {
     blocks[index] = block;
     return block;
   }
-    return block;
-  }
 
   function finishStreamBlocks(blocks) {
     let out = [];

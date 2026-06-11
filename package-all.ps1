@@ -28,6 +28,7 @@ Write-Host ""
 Write-Host "[2/4] Packaging Agent..." -ForegroundColor Yellow
 Push-Location gs-agent
 $GsExePath = Resolve-Path "..\gts\gs.exe"
+Write-Host "Running agent preflight syntax/import check..." -ForegroundColor Gray
 & $GsExePath --timeout 60s dist . ..\dist\gs-agent.exe
 if ($LASTEXITCODE -ne 0) { exit 1 }
 Pop-Location
@@ -38,6 +39,7 @@ Write-Host ""
 Write-Host "[3/4] Packaging Gateway..." -ForegroundColor Yellow
 Push-Location gs-gateway
 $GsExePath = Resolve-Path "..\gts\gs.exe"
+Write-Host "Running gateway preflight syntax/import check..." -ForegroundColor Gray
 & $GsExePath --timeout 60s dist . ..\dist\gs-gateway.exe
 if ($LASTEXITCODE -ne 0) { exit 1 }
 Pop-Location

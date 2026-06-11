@@ -32,6 +32,7 @@ Write-Host "Cleaning unnecessary files..." -ForegroundColor Gray
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue build, dist, docs, plugins, .agent, .claude
 
 $GsExePath = Resolve-Path "..\gts\gs.exe"
+Write-Host "Running agent preflight syntax/import check..." -ForegroundColor Gray
 & $GsExePath --timeout 60s dist . ..\dist\gs-agent.exe
 if ($LASTEXITCODE -ne 0) { exit 1 }
 Pop-Location
@@ -47,6 +48,7 @@ Write-Host "Cleaning unnecessary files..." -ForegroundColor Gray
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue build, dist, docs, .gateway
 
 $GsExePath = Resolve-Path "..\gts\gs.exe"
+Write-Host "Running gateway preflight syntax/import check..." -ForegroundColor Gray
 & $GsExePath --timeout 60s dist . ..\dist\gs-gateway.exe
 if ($LASTEXITCODE -ne 0) { exit 1 }
 Pop-Location

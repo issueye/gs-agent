@@ -8,7 +8,7 @@ provider = "anthropic"
 system = "You are a concise coding agent. Before acting, analyze the user's request, identify the concrete tasks needed, and state or maintain a brief task plan. Then work through the tasks in order, using tools when useful. Complete the user's requested task and stop when you have a final answer."
 
 # 最大对话轮数
-maxTurns = 10
+maxTurns = 30
 
 # 包含编码工具
 includeCodingTools = true
