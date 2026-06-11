@@ -290,7 +290,12 @@ export function taskPrompt(root, taskFile, taskText) {
     throw new ReferenceError("task file is empty: " + taskFile);
   }
 
-  return "Project root: .\nTask file: " + taskFile + "\n\n" + task + "\n\nUse read_task only for the task file. Use list_dir/read_file/grep on the project root when inspecting this agent project.";
+  return `Project root: .
+Task file: ${taskFile}
+  
+${task}
+
+Use read_task only for the task file. Use list_dir/read_file/grep on the project root when inspecting this agent project.`;
 }
 
 export function directPrompt(input) {
@@ -531,6 +536,14 @@ export function runAgentTurn(options) {
   }
 }
 
+/**
+ * 运行 agent 应用。
+ * @param {Object} options - 运行选项。
+ * @param {string} options.root - 项目根目录。
+ * @param {string} options.session - 会话 ID 或会话目录路径。
+ * @param {string} options.workspace - 工作空间目录路径。
+ * @returns {Object} - 运行结果。
+ */
 export function runAgentApp(options) {
   if (!options) {
     options = {};
