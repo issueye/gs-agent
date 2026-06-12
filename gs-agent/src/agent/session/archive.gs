@@ -1,6 +1,6 @@
 let fs = require("@std/fs");
 let path = require("@std/path");
-let db = require("@std/db");
+let orm = require("@std/orm");
 
 import { messageFromSessionEvent, sessionRecordLevel } from "@/agent/session/messages";
 
@@ -30,15 +30,53 @@ function ensureParentDir(file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
 }
 
-function openArchiveDb(file) {
+const sessionMessageSchema = {
+  table: "session_messages",
+  columns: [
+    { name: "idx", type: "integer", primaryKey: true },
+    { name: "session_id", type: "text" },
+    { name: "level", type: "text" },
+    { name: "kind", type: "text" },
+    { name: "role", type: "text" },
+    { name: "name", type: "text" },
+    { name: "message_id", type: "text" },
+    { name: "content", type: "text" },
+    { name: "message_json", type: "text" },
+    { name: "entry_json", type: "text" },
+    { name: "created_at", type: "text", notNull: true, defaultValue: "current_timestamp" },
+  ],
+  indexes: [
+    { name: "idx_session_messages_content", columns: ["content"] },
+    { name: "idx_session_messages_session", columns: ["session_id"] },
+    { name: "idx_session_messages_level", columns: ["level"] },
+    { name: "idx_session_messages_kind", columns: ["kind"] },
+  ],
+};
+
+function openArchiveOrm(file) {
   ensureParentDir(file);
-  let conn = db.open("sqlite", file);
-  conn.exec("create table if not exists session_messages (idx integer primary key, session_id text, level text, kind text, role text, name text, message_id text, content text, message_json text, entry_json text, created_at text not null default current_timestamp)");
-  conn.exec("create index if not exists idx_session_messages_content on session_messages(content)");
-  conn.exec("create index if not exists idx_session_messages_session on session_messages(session_id)");
-  conn.exec("create index if not exists idx_session_messages_level on session_messages(level)");
-  conn.exec("create index if not exists idx_session_messages_kind on session_messages(kind)");
-  return conn;
+  let archive = orm.connect("sqlite", file);
+  archive.autoMigrate(sessionMessageSchema);
+  return archive;
+}
+
+function sessionMessages(archive) {
+  return archive.table("session_messages");
+}
+
+function archiveRow(entry) {
+  return {
+    idx: entry.index,
+    session_id: entry.sessionId || "",
+    level: entry.level || "",
+    kind: entry.kind || "",
+    role: entry.role || "",
+    name: entry.name || "",
+    message_id: entry.id || "",
+    content: entry.content || "",
+    message_json: JSON.stringify(entry.message || {}),
+    entry_json: JSON.stringify(entry),
+  };
 }
 
 function archiveEntry(record, index) {
@@ -84,34 +122,22 @@ export function createSessionArchive(file, options) {
   let sessionId = options.sessionId || "";
 
   function append(record) {
-    let conn = openArchiveDb(file);
-    let indexRow = conn.queryOne("select coalesce(max(idx) + 1, 0) as next_idx from session_messages");
+    let archive = openArchiveOrm(file);
+    let indexRow = sessionMessages(archive).select("idx").orderBy("idx DESC").first();
     let index = 0;
-    if (indexRow && indexRow.next_idx !== undefined) {
-      index = indexRow.next_idx;
+    if (indexRow) {
+      if (indexRow.idx !== undefined) {
+        index = indexRow.idx + 1;
+      }
     }
 
     let entry = archiveEntry(record, index);
     if (!entry) {
-      conn.close();
+      archive.close();
       return undefined;
     }
-    conn.exec(
-      "insert into session_messages (idx, session_id, level, kind, role, name, message_id, content, message_json, entry_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        entry.index,
-        entry.sessionId || "",
-        entry.level || "",
-        entry.kind || "",
-        entry.role || "",
-        entry.name || "",
-        entry.id || "",
-        entry.content || "",
-        JSON.stringify(entry.message || {}),
-        JSON.stringify(entry),
-      ]
-    );
-    conn.close();
+    sessionMessages(archive).insert(archiveRow(entry));
+    archive.close();
     return entry;
   }
 
@@ -119,14 +145,14 @@ export function createSessionArchive(file, options) {
     if (!fs.existsSync(file)) {
       return [];
     }
-    let conn = openArchiveDb(file);
-    let rows = [];
+    let archive = openArchiveOrm(file);
+    let query = sessionMessages(archive)
+      .select("idx", "session_id", "level", "kind", "role", "name", "message_id", "content", "message_json", "entry_json");
     if (sessionId !== "") {
-      rows = conn.query("select idx, session_id, level, kind, role, name, message_id, content, message_json, entry_json from session_messages where session_id = ? order by idx", [sessionId]);
-    } else {
-      rows = conn.query("select idx, session_id, level, kind, role, name, message_id, content, message_json, entry_json from session_messages order by idx");
+      query = query.where("session_id = ?", sessionId);
     }
-    conn.close();
+    let rows = query.orderBy("idx ASC").find();
+    archive.close();
     let entries = [];
     for (let row of rows) {
       let entry = undefined;
@@ -164,35 +190,24 @@ export function createSessionArchive(file, options) {
       return [];
     }
 
-    let conn = openArchiveDb(file);
+    let archive = openArchiveOrm(file);
     let rows = [];
+    let queryBuilder = sessionMessages(archive)
+      .select("idx", "session_id", "level", "kind", "role", "name", "message_id", "content");
+    if (searchSessionId !== "") {
+      queryBuilder = queryBuilder.where("session_id = ?", searchSessionId);
+    }
     if (query === "") {
-      if (searchSessionId !== "") {
-        rows = conn.query(
-          "select idx, session_id, level, kind, role, name, message_id, content from session_messages where session_id = ? order by idx desc limit ?",
-          [searchSessionId, maxResults]
-        );
-      } else {
-        rows = conn.query(
-          "select idx, session_id, level, kind, role, name, message_id, content from session_messages order by idx desc limit ?",
-          [maxResults]
-        );
-      }
+      rows = queryBuilder.orderBy("idx DESC").limit(maxResults).find();
     } else {
       let pattern = "%" + query + "%";
-      if (searchSessionId !== "") {
-        rows = conn.query(
-          "select idx, session_id, level, kind, role, name, message_id, content from session_messages where session_id = ? and lower(entry_json) like ? order by idx desc limit ?",
-          [searchSessionId, pattern, maxResults]
-        );
-      } else {
-        rows = conn.query(
-          "select idx, session_id, level, kind, role, name, message_id, content from session_messages where lower(entry_json) like ? order by idx desc limit ?",
-          [pattern, maxResults]
-        );
-      }
+      rows = queryBuilder
+        .where("lower(entry_json) like ?", pattern)
+        .orderBy("idx DESC")
+        .limit(maxResults)
+        .find();
     }
-    conn.close();
+    archive.close();
 
     let results = [];
     for (let row of rows) {
