@@ -55,6 +55,11 @@ The script creates IDs with a timestamp suffix and deletes the provider, model, 
 
 - management API setup for proxy API key, providers, provider models, and routing rules
 - OpenAI Chat to OpenAI Chat non-streaming proxy through `POST /v1/chat/completions`
+- OpenAI Chat to OpenAI Chat same-protocol streaming proxy through `POST /v1/chat/completions` with `stream: true`
+- OpenAI Chat downstream to Anthropic upstream streaming conversion
+- Anthropic downstream to OpenAI Chat upstream streaming conversion
+- Responses downstream to OpenAI Chat upstream non-streaming and streaming conversion
+- OpenAI Chat downstream to Responses upstream non-streaming and streaming conversion
 - upstream mock receipt of `/v1/chat/completions` with the configured target model
 - traffic recording of prompt, completion, and total tokens for the OpenAI proxy request
 - OpenAI Chat downstream to Anthropic upstream conversion through `/v1/messages`

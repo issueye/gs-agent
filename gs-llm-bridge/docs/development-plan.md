@@ -80,8 +80,8 @@ Status: partial
 
 Deliverables:
 
-- Add SSE stream forwarding for same-protocol routes. Not delivered yet.
-- Add stream conversion where practical after non-stream converters stabilize. Not delivered yet.
+- Add SSE stream forwarding for same-protocol routes. Delivered for routes where downstream and upstream protocols match.
+- Add stream conversion where practical after non-stream converters stabilize. Delivered for OpenAI Chat, Anthropic, and Responses text streams across the common conversion directions.
 - Add traffic body-preview limits according to config.
 - Add packaging scripts aligned with the root GTS build layout. Delivered with `scripts/package.ps1` and `scripts/package.sh`.
 - Add regression smoke scripts for management, routing, and non-stream proxy flow.
@@ -90,7 +90,8 @@ Acceptance:
 
 - Packaging creates `dist/gs-llm-bridge` without `.data`, `.data-*`, or nested `dist` output.
 - The package contains `src`, `docs`, `config.example.toml`, `project.toml`, `main.gs`, smoke scripts, and `README.md`.
-- Streaming requests do not buffer entire upstream responses for same-protocol forwarding. Pending true streaming support.
+- Streaming requests do not buffer entire upstream responses for same-protocol forwarding.
+- Responses text requests and text streams convert to and from OpenAI Chat and Anthropic. Full multimodal/tool-call parity remains future work.
 - Traffic list remains bounded and does not leak full request bodies unless explicitly enabled.
 - Smoke scripts pass from a clean checkout.
 

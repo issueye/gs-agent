@@ -1,4 +1,4 @@
-import { ProtocolAnthropic, ProtocolOpenAIChat } from "@/services/protocols";
+import { ProtocolAnthropic, ProtocolOpenAIChat, ProtocolOpenAIResponses } from "@/services/protocols";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value || {}));
@@ -78,6 +78,20 @@ function anthropicContentFromOpenAI(content) {
   return out;
 }
 
+function parseToolArguments(value) {
+  if (!value) {
+    return {};
+  }
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      return {};
+    }
+  }
+  return value;
+}
+
 function openAIContentFromAnthropic(content) {
   if (typeof content === "string") {
     return content;
@@ -99,19 +113,199 @@ function openAIContentFromAnthropic(content) {
   return parts.join("");
 }
 
+function anthropicToolUses(content) {
+  let out = [];
+  if (!Array.isArray(content)) {
+    return out;
+  }
+  for (let item of content) {
+    if (!item || item.type !== "tool_use") {
+      continue;
+    }
+    out.push({
+      id: item.id || "",
+      name: item.name || "",
+      input: item.input || {},
+    });
+  }
+  return out;
+}
+
+function chatToolCallsFromAnthropic(content) {
+  let out = [];
+  for (let item of anthropicToolUses(content)) {
+    let toolCall = {
+      id: item.id,
+      type: "function",
+    };
+    toolCall["function"] = {
+      name: item.name,
+      arguments: JSON.stringify(item.input || {}),
+    };
+    out.push(toolCall);
+  }
+  return out;
+}
+
+function responsePartText(part) {
+  if (!part) {
+    return "";
+  }
+  return String(part.text || part.output_text || part.input_text || "");
+}
+
+function responseContentText(content) {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return String(content || "");
+  }
+  let out = [];
+  for (let part of content) {
+    let text = responsePartText(part);
+    if (text !== "") {
+      out.push(text);
+    }
+  }
+  return out.join("");
+}
+
+function responsesInputToMessages(input) {
+  if (typeof input === "string") {
+    return [{
+      role: "user",
+      content: input,
+    }];
+  }
+  if (!Array.isArray(input)) {
+    return [{
+      role: "user",
+      content: String(input || ""),
+    }];
+  }
+  let messages = [];
+  for (let item of input) {
+    if (!item) {
+      continue;
+    }
+    let role = String(item.role || "user");
+    if (role === "developer") {
+      role = "system";
+    }
+    if (role !== "system" && role !== "assistant") {
+      role = "user";
+    }
+    messages.push({
+      role: role,
+      content: responseContentText(item.content),
+    });
+  }
+  if (messages.length === 0) {
+    messages.push({
+      role: "user",
+      content: "",
+    });
+  }
+  return messages;
+}
+
+function chatMessagesToResponsesInput(messages) {
+  let input = [];
+  for (let message of messages || []) {
+    if (!message) {
+      continue;
+    }
+    let role = String(message.role || "user");
+    if (role === "system") {
+      role = "developer";
+    }
+    let contentType = role === "assistant" ? "output_text" : "input_text";
+    input.push({
+      type: "message",
+      role: role,
+      content: [{
+        type: contentType,
+        text: textFromContent(message.content),
+      }],
+    });
+    if (role === "assistant") {
+      for (let toolCall of message.tool_calls || []) {
+        let fn = toolCall["function"] || {};
+        input.push({
+          type: "function_call",
+          call_id: toolCall.id || "",
+          name: fn.name || "",
+          arguments: String(fn.arguments || "{}"),
+        });
+      }
+    }
+    if (role === "tool") {
+      input.push({
+        type: "function_call_output",
+        call_id: message.tool_call_id || "",
+        output: textFromContent(message.content),
+      });
+    }
+  }
+  return input;
+}
+
+function anthropicMessagesToResponsesInput(system, messages) {
+  let input = [];
+  let sys = textFromContent(system);
+  if (sys !== "") {
+    input.push({
+      type: "message",
+      role: "developer",
+      content: [{
+        type: "input_text",
+        text: sys,
+      }],
+    });
+  }
+  for (let message of messages || []) {
+    if (!message) {
+      continue;
+    }
+    let role = String(message.role || "user");
+    let contentType = role === "assistant" ? "output_text" : "input_text";
+    input.push({
+      type: "message",
+      role: role,
+      content: [{
+        type: contentType,
+        text: openAIContentFromAnthropic(message.content),
+      }],
+    });
+    if (role === "assistant") {
+      for (let toolUse of anthropicToolUses(message.content)) {
+        input.push({
+          type: "function_call",
+          call_id: toolUse.id,
+          name: toolUse.name,
+          arguments: JSON.stringify(toolUse.input || {}),
+        });
+      }
+    }
+  }
+  return input;
+}
+
 function anthropicToolsFromOpenAI(tools) {
   if (!Array.isArray(tools)) {
     return undefined;
   }
   let out = [];
   for (let tool of tools) {
-    if (!tool || tool.type !== "function" || !tool.function) {
+    let fn = tool ? tool["function"] : undefined;
+    if (!tool || tool.type !== "function" || !fn) {
       continue;
     }
     out.push({
-      name: tool.function.name || "",
-      description: tool.function.description || "",
-      input_schema: tool.function.parameters || {
+      name: fn.name || "",
+      description: fn.description || "",
+      input_schema: fn.parameters || {
         type: "object",
         properties: {},
       },
@@ -190,9 +384,13 @@ function convertAnthropicRequestToOpenAIChat(body, model) {
     if (!message) {
       continue;
     }
+    let content = openAIContentFromAnthropic(message.content);
+    if (content === "" && message.content !== undefined && message.content !== null) {
+      content = String(message.content || "");
+    }
     out.messages.push({
       role: String(message.role || "user"),
-      content: openAIContentFromAnthropic(message.content),
+      content: content,
     });
   }
   if ("max_tokens" in input) {
@@ -209,6 +407,78 @@ function convertAnthropicRequestToOpenAIChat(body, model) {
   }
   if ("stop_sequences" in input) {
     out.stop = input.stop_sequences;
+  }
+  return out;
+}
+
+function convertResponsesRequestToOpenAIChat(body, model) {
+  let input = objectBody(body);
+  let out = {
+    model: model,
+    messages: responsesInputToMessages(input.input),
+  };
+  if (input.instructions) {
+    out.messages.unshift({
+      role: "system",
+      content: String(input.instructions || ""),
+    });
+  }
+  if ("temperature" in input) {
+    out.temperature = input.temperature;
+  }
+  if ("top_p" in input) {
+    out.top_p = input.top_p;
+  }
+  if ("stream" in input) {
+    out.stream = input.stream;
+  }
+  if ("max_output_tokens" in input) {
+    out.max_tokens = input.max_output_tokens;
+  }
+  return out;
+}
+
+function convertOpenAIChatRequestToResponses(body, model) {
+  let input = objectBody(body);
+  let out = {
+    model: model,
+    input: chatMessagesToResponsesInput(input.messages || []),
+    stream: input.stream === true,
+    store: false,
+  };
+  if (input.max_tokens || input.max_completion_tokens) {
+    out.max_output_tokens = Number(input.max_completion_tokens || input.max_tokens);
+  }
+  if ("temperature" in input) {
+    out.temperature = input.temperature;
+  }
+  if ("top_p" in input) {
+    out.top_p = input.top_p;
+  }
+  return out;
+}
+
+function convertResponsesRequestToAnthropic(body, model, defaultMaxTokens) {
+  let chat = convertResponsesRequestToOpenAIChat(body, model);
+  return convertOpenAIChatRequestToAnthropic(chat, model, defaultMaxTokens);
+}
+
+function convertAnthropicRequestToResponses(body, model) {
+  let input = objectBody(body);
+  let out = {
+    model: model,
+    input: anthropicMessagesToResponsesInput(input.system, input.messages || []),
+    stream: input.stream === true,
+    store: false,
+  };
+  if (input.max_tokens) {
+    out.max_output_tokens = input.max_tokens;
+  }
+  if ("temperature" in input) {
+    out.temperature = input.temperature;
+  }
+  if ("top_p" in input) {
+    out.top_p = input.top_p;
   }
   return out;
 }
@@ -238,6 +508,14 @@ function finishReasonFromAnthropic(reason) {
 function convertAnthropicResponseToOpenAIChat(body, model) {
   let input = objectBody(body);
   let created = Math.floor((new Date()).getTime() / 1000);
+  let toolCalls = chatToolCallsFromAnthropic(input.content);
+  let message = {
+    role: "assistant",
+    content: openAIContentFromAnthropic(input.content),
+  };
+  if (toolCalls.length > 0) {
+    message.tool_calls = toolCalls;
+  }
   return {
     id: input.id || "",
     object: "chat.completion",
@@ -245,10 +523,7 @@ function convertAnthropicResponseToOpenAIChat(body, model) {
     model: model || input.model || "",
     choices: [{
       index: 0,
-      message: {
-        role: "assistant",
-        content: openAIContentFromAnthropic(input.content),
-      },
+      message: message,
       finish_reason: finishReasonFromAnthropic(input.stop_reason),
     }],
     usage: extractUsage(input),
@@ -260,20 +535,245 @@ function convertOpenAIChatResponseToAnthropic(body, model) {
   let choice = (input.choices || [])[0] || {};
   let message = choice.message || {};
   let usage = extractUsage(input);
+  let content = [];
+  let text = String(message.content || "");
+  if (text !== "") {
+    content.push({
+      type: "text",
+      text: text,
+    });
+  }
+  for (let toolCall of message.tool_calls || []) {
+    let fn = toolCall["function"] || {};
+    content.push({
+      type: "tool_use",
+      id: toolCall.id || "",
+      name: fn.name || "",
+      input: parseToolArguments(fn.arguments),
+    });
+  }
+  if (content.length === 0) {
+    content.push({
+      type: "text",
+      text: "",
+    });
+  }
   return {
     id: input.id || "",
     type: "message",
     role: "assistant",
     model: model || input.model || "",
-    content: [{
-      type: "text",
-      text: String(message.content || ""),
-    }],
+    content: content,
     stop_reason: choice.finish_reason || "end_turn",
     stop_sequence: null,
     usage: {
       input_tokens: usage.input_tokens,
       output_tokens: usage.output_tokens,
+    },
+  };
+}
+
+function outputTextFromResponses(body) {
+  let input = objectBody(body);
+  let parts = [];
+  for (let item of input.output || []) {
+    if (!item || item.type !== "message") {
+      continue;
+    }
+    for (let part of item.content || []) {
+      if (part && part.type === "output_text") {
+        parts.push(String(part.text || ""));
+      }
+    }
+  }
+  return parts.join("");
+}
+
+function responseFunctionCalls(body) {
+  let input = objectBody(body);
+  let out = [];
+  for (let item of input.output || []) {
+    if (!item || item.type !== "function_call") {
+      continue;
+    }
+    out.push({
+      call_id: item.call_id || item.callID || "",
+      name: item.name || "",
+      arguments: String(item.arguments || "{}"),
+    });
+  }
+  return out;
+}
+
+function convertResponsesResponseToOpenAIChat(body, model) {
+  let input = objectBody(body);
+  let usage = extractUsage(input);
+  let toolCalls = [];
+  for (let item of responseFunctionCalls(input)) {
+    let toolCall = {
+      id: item.call_id,
+      type: "function",
+    };
+    toolCall["function"] = {
+      name: item.name,
+      arguments: item.arguments,
+    };
+    toolCalls.push(toolCall);
+  }
+  let message = {
+    role: "assistant",
+    content: outputTextFromResponses(input),
+  };
+  if (toolCalls.length > 0) {
+    message.tool_calls = toolCalls;
+  }
+  return {
+    id: input.id || "chatcmpl-" + String((new Date()).getTime()),
+    object: "chat.completion",
+    created: Math.floor((new Date()).getTime() / 1000),
+    model: model || input.model || "",
+    choices: [{
+      index: 0,
+      message: message,
+      finish_reason: toolCalls.length > 0 ? "tool_calls" : (input.status === "incomplete" ? "length" : "stop"),
+    }],
+    usage: usage,
+  };
+}
+
+function convertOpenAIChatResponseToResponses(body, model) {
+  let input = objectBody(body);
+  let choice = (input.choices || [])[0] || {};
+  let message = choice.message || {};
+  let usage = extractUsage(input);
+  let output = [];
+  let text = String(message.content || "");
+  if (text !== "") {
+    output.push({
+      type: "message",
+      role: "assistant",
+      content: [{
+        type: "output_text",
+        text: text,
+      }],
+    });
+  }
+  for (let toolCall of message.tool_calls || []) {
+    let fn = toolCall["function"] || {};
+    output.push({
+      type: "function_call",
+      call_id: toolCall.id || "",
+      name: fn.name || "",
+      arguments: String(fn.arguments || "{}"),
+    });
+  }
+  if (output.length === 0) {
+    output.push({
+      type: "message",
+      role: "assistant",
+      content: [{
+        type: "output_text",
+        text: "",
+      }],
+    });
+  }
+  return {
+    id: input.id || "resp-" + String((new Date()).getTime()),
+    object: "response",
+    status: "completed",
+    model: model || input.model || "",
+    output: output,
+    usage: {
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      total_tokens: usage.total_tokens,
+    },
+  };
+}
+
+function convertResponsesResponseToAnthropic(body, model) {
+  let input = objectBody(body);
+  let usage = extractUsage(input);
+  let content = [];
+  let text = outputTextFromResponses(input);
+  if (text !== "") {
+    content.push({
+      type: "text",
+      text: text,
+    });
+  }
+  for (let item of responseFunctionCalls(input)) {
+    content.push({
+      type: "tool_use",
+      id: item.call_id,
+      name: item.name,
+      input: parseToolArguments(item.arguments),
+    });
+  }
+  if (content.length === 0) {
+    content.push({
+      type: "text",
+      text: "",
+    });
+  }
+  return {
+    id: input.id || "msg-" + String((new Date()).getTime()),
+    type: "message",
+    role: "assistant",
+    model: model || input.model || "",
+    content: content,
+    stop_reason: content.length > 0 && content[0].type === "tool_use" ? "tool_use" : (input.status === "incomplete" ? "max_tokens" : "end_turn"),
+    stop_sequence: null,
+    usage: {
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+    },
+  };
+}
+
+function convertAnthropicResponseToResponses(body, model) {
+  let input = objectBody(body);
+  let usage = extractUsage(input);
+  let output = [];
+  let text = openAIContentFromAnthropic(input.content);
+  if (text !== "") {
+    output.push({
+      type: "message",
+      role: "assistant",
+      content: [{
+        type: "output_text",
+        text: text,
+      }],
+    });
+  }
+  for (let toolUse of anthropicToolUses(input.content)) {
+    output.push({
+      type: "function_call",
+      call_id: toolUse.id,
+      name: toolUse.name,
+      arguments: JSON.stringify(toolUse.input || {}),
+    });
+  }
+  if (output.length === 0) {
+    output.push({
+      type: "message",
+      role: "assistant",
+      content: [{
+        type: "output_text",
+        text: "",
+      }],
+    });
+  }
+  return {
+    id: input.id || "resp-" + String((new Date()).getTime()),
+    object: "response",
+    status: "completed",
+    model: model || input.model || "",
+    output: output,
+    usage: {
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      total_tokens: usage.total_tokens,
     },
   };
 }
@@ -288,6 +788,18 @@ export function convertRequest(downstream, upstream, body, model, defaultMaxToke
   if (downstream === ProtocolAnthropic && upstream === ProtocolOpenAIChat) {
     return convertAnthropicRequestToOpenAIChat(body, model);
   }
+  if (downstream === ProtocolOpenAIResponses && upstream === ProtocolOpenAIChat) {
+    return convertResponsesRequestToOpenAIChat(body, model);
+  }
+  if (downstream === ProtocolOpenAIChat && upstream === ProtocolOpenAIResponses) {
+    return convertOpenAIChatRequestToResponses(body, model);
+  }
+  if (downstream === ProtocolOpenAIResponses && upstream === ProtocolAnthropic) {
+    return convertResponsesRequestToAnthropic(body, model, defaultMaxTokens);
+  }
+  if (downstream === ProtocolAnthropic && upstream === ProtocolOpenAIResponses) {
+    return convertAnthropicRequestToResponses(body, model);
+  }
   return sameProtocolRequest(body, model);
 }
 
@@ -300,6 +812,18 @@ export function convertResponse(downstream, upstream, body, model) {
   }
   if (downstream === ProtocolAnthropic && upstream === ProtocolOpenAIChat) {
     return convertOpenAIChatResponseToAnthropic(body, model);
+  }
+  if (downstream === ProtocolOpenAIResponses && upstream === ProtocolOpenAIChat) {
+    return convertOpenAIChatResponseToResponses(body, model);
+  }
+  if (downstream === ProtocolOpenAIChat && upstream === ProtocolOpenAIResponses) {
+    return convertResponsesResponseToOpenAIChat(body, model);
+  }
+  if (downstream === ProtocolOpenAIResponses && upstream === ProtocolAnthropic) {
+    return convertAnthropicResponseToResponses(body, model);
+  }
+  if (downstream === ProtocolAnthropic && upstream === ProtocolOpenAIResponses) {
+    return convertResponsesResponseToAnthropic(body, model);
   }
   return sameProtocolRequest(body, model);
 }

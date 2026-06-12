@@ -1,5 +1,6 @@
 import { ProtocolAnthropic, joinUpstreamURL } from "@/services/protocols";
 import { convertRequest, convertResponse, extractUsage } from "@/services/converters";
+import { canConvertStream, convertStream } from "@/services/stream_converters";
 
 let http = require("@std/net/http/client");
 let crypto = require("@std/crypto");
@@ -82,6 +83,25 @@ function responseBodyJSON(body) {
     return JSON.parse(body);
   } catch (err) {
     return undefined;
+  }
+}
+
+function requestWantsStream(body) {
+  if (!body) {
+    return false;
+  }
+  return body.stream === true;
+}
+
+function copyResponseHeaders(res, headers) {
+  if (!headers) {
+    return;
+  }
+  for (let key in headers) {
+    let lower = String(key).toLowerCase();
+    if (lower !== "content-length" && lower !== "transfer-encoding" && lower !== "connection") {
+      res.setHeader(key, headers[key]);
+    }
   }
 }
 
@@ -202,6 +222,36 @@ export function createProxyService(config, store, resolver) {
 
     let upstreamBody = convertRequest(downstream, route.upstream_protocol, body, route.model, route.default_max_tokens);
     try {
+      if (requestWantsStream(body) && (downstream === route.upstream_protocol || canConvertStream(downstream, route.upstream_protocol))) {
+        let upstreamStream = http.stream({
+          method: "POST",
+          url: upstreamURL,
+          headers: upstreamHeaders(route, req),
+          body: upstreamBody,
+        });
+        let streamStatus = Number(upstreamStream.status || 200);
+        copyResponseHeaders(res, upstreamStream.headers);
+        if (streamStatus >= 400) {
+          let errorBody = "";
+          if (upstreamStream.body) {
+            errorBody = upstreamStream.body.readAll();
+          }
+          if (upstreamStream.close) {
+            upstreamStream.close();
+          }
+          record(config, store, req, rid, downstream, route, streamStatus, started, "upstream returned status " + String(streamStatus), requestedModel, body);
+          return res.status(streamStatus).send(errorBody || "");
+        }
+        record(config, store, req, rid, downstream, route, streamStatus, started, "", requestedModel, body);
+        res.status(streamStatus);
+        if (downstream === route.upstream_protocol) {
+          return res.stream(upstreamStream.body);
+        }
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        return convertStream(downstream, route.upstream_protocol, upstreamStream, res, route.model);
+      }
+
       let upstream = http.request({
         method: "POST",
         url: upstreamURL,
@@ -209,14 +259,7 @@ export function createProxyService(config, store, resolver) {
         body: upstreamBody,
       });
       let status = Number(upstream.status || 200);
-      if (upstream.headers) {
-        for (let key in upstream.headers) {
-          let lower = String(key).toLowerCase();
-          if (lower !== "content-length" && lower !== "transfer-encoding" && lower !== "connection") {
-            res.setHeader(key, upstream.headers[key]);
-          }
-        }
-      }
+      copyResponseHeaders(res, upstream.headers);
       if (status >= 400) {
         record(config, store, req, rid, downstream, route, status, started, "upstream returned status " + String(status), requestedModel, body);
         return res.status(status).send(upstream.body || "");
