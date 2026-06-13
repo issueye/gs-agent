@@ -115,7 +115,19 @@ function copyResponseHeaders(res, headers) {
   }
   for (let key in headers) {
     let lower = String(key).toLowerCase();
-    if (lower !== "content-length" && lower !== "transfer-encoding" && lower !== "connection") {
+    if (
+      lower !== "content-length" &&
+      lower !== "transfer-encoding" &&
+      lower !== "connection" &&
+      lower !== "keep-alive" &&
+      lower !== "te" &&
+      lower !== "trailer" &&
+      lower !== "trailers" &&
+      lower !== "upgrade" &&
+      lower !== "content-encoding" &&
+      lower !== "content-range" &&
+      !lower.startsWith("proxy-")
+    ) {
       res.setHeader(key, headers[key]);
     }
   }
@@ -138,6 +150,42 @@ function responseIsSSE(headers) {
 function requestIncludesUsageChunk(body) {
   let options = body ? body.stream_options || body.streamOptions || {} : {};
   return options.include_usage === true || options.includeUsage === true;
+}
+
+function requestPath(url) {
+  let text = String(url || "");
+  let queryIndex = text.indexOf("?");
+  if (queryIndex >= 0) {
+    return text.slice(0, queryIndex);
+  }
+  return text;
+}
+
+function upstreamErrorMessage(status, body) {
+  let prefix = "upstream returned status " + String(status);
+  let parsed = responseBodyJSON(body);
+  if (!parsed) {
+    let text = String(body || "").trim();
+    if (text !== "") {
+      return prefix + ": " + text;
+    }
+    return prefix;
+  }
+  let message = "";
+  if (parsed.error) {
+    if (typeof parsed.error === "string") {
+      message = parsed.error;
+    } else {
+      message = String(parsed.error.message || parsed.error.type || "");
+    }
+  }
+  if (message === "" && parsed.message) {
+    message = String(parsed.message || "");
+  }
+  if (message === "") {
+    message = JSON.stringify(parsed);
+  }
+  return prefix + ": " + message;
 }
 
 function bodyPreview(config, body) {
@@ -193,7 +241,7 @@ function record(config, store, req, requestIDValue, downstream, route, statusCod
   store.recordTraffic({
     id: requestIDValue,
     request_id: requestIDValue,
-    endpoint: req.url || "",
+    endpoint: requestPath(req.url || ""),
     method: req.method || "",
     client_ip: clientIP(req),
     user_agent: headerValue(req, "user-agent"),
@@ -281,8 +329,9 @@ export function createProxyService(config, store, resolver) {
           if (upstreamStream.close) {
             upstreamStream.close();
           }
-          record(config, store, req, rid, downstream, route, streamStatus, started, "upstream returned status " + String(streamStatus), requestedModel, body);
-          return res.status(streamStatus).send(errorBody || "");
+          let message = upstreamErrorMessage(streamStatus, errorBody);
+          record(config, store, req, rid, downstream, route, streamStatus, started, message, requestedModel, body);
+          return proxyError(res, downstream, streamStatus, message);
         }
         if (wantsStream && !responseIsSSE(upstreamStream.headers)) {
           let fallbackBody = "";
@@ -354,8 +403,9 @@ export function createProxyService(config, store, resolver) {
       let status = Number(upstream.status || 200);
       copyResponseHeaders(res, upstream.headers);
       if (status >= 400) {
-        record(config, store, req, rid, downstream, route, status, started, "upstream returned status " + String(status), requestedModel, body);
-        return res.status(status).send(upstream.body || "");
+        let message = upstreamErrorMessage(status, upstream.body || "");
+        record(config, store, req, rid, downstream, route, status, started, message, requestedModel, body);
+        return proxyError(res, downstream, status, message);
       }
       let parsed = responseBodyJSON(upstream.body);
       if (parsed) {

@@ -21,6 +21,16 @@ function resolveTaskAgentId(task) {
   return String(run.agentId || run.agent_id || input.agentId || input.agent_id || "");
 }
 
+function resolveDefaultAgent(store) {
+  let agents = store.listAgents();
+  for (let agent of agents) {
+    if (agent.enabled) {
+      return agent;
+    }
+  }
+  return undefined;
+}
+
 function resolveProvider(store, agent) {
   if (!agent) {
     return undefined;
@@ -95,12 +105,17 @@ function bridgeRun(body, task) {
 
 function agentRunConfig(gatewayModel, task) {
   let agentId = resolveTaskAgentId(task);
+  let agent = undefined;
   if (agentId === "") {
-    return {};
-  }
-  let agent = gatewayModel.store.getAgent(agentId);
-  if (!agent) {
-    throw new Error("agent not found: " + agentId);
+    agent = resolveDefaultAgent(gatewayModel.store);
+    if (!agent) {
+      throw new Error("AGENT_NOT_CONFIGURED: no default agent available");
+    }
+  } else {
+    agent = gatewayModel.store.getAgent(agentId);
+    if (!agent) {
+      throw new Error("agent not found: " + agentId);
+    }
   }
   if (!agent.enabled) {
     throw new Error("agent is disabled: " + agentId);
@@ -136,6 +151,12 @@ function agentTaskPayload(gatewayModel, task) {
   let body = task.payload || {};
   let input = bridgeInput(body, task);
   let run = bridgeRun(body, task);
+  let config = {};
+  try {
+    config = agentRunConfig(gatewayModel, task);
+  } catch (error) {
+    // 构建 payload 时允许缺少 agent 配置；实际运行前会再次检查。
+  }
   return {
     taskId: task.id,
     id: task.id,
@@ -145,7 +166,7 @@ function agentTaskPayload(gatewayModel, task) {
     source: body.source || {},
     input: input,
     run: run,
-    config: agentRunConfig(gatewayModel, task),
+    config: config,
     stream: {
       url: wsBaseUrl(gatewayModel.config) + "/ws/agent-events",
       taskId: task.id,
@@ -161,7 +182,8 @@ export function buildAgentTaskPayloadForGateway(gatewayModel, task) {
 function callAgent(gatewayModel, task) {
   let agentRoot = gatewayModel.config.gateway.agentRoot;
   let entry = path.join(agentRoot, "gateway-task.gs");
-  return runtime.callScript(entry, "runGatewayTask", [agentTaskPayload(gatewayModel, task)], {
+  let payload = agentTaskPayload(gatewayModel, task);
+  return runtime.callScript(entry, "runGatewayTask", [payload], {
     cwd: agentRoot,
     argv: ["gs-agent", "gateway-task"],
   });
@@ -185,6 +207,7 @@ export function createAgentBridgeModel(gatewayModel) {
     gatewayModel.store.updateTask(id, { status: "running" });
 
     try {
+      let runConfig = agentRunConfig(gatewayModel, task);
       let result = callAgent(gatewayModel, task);
       let replyInput = createGatewayIMReply(task, result);
       let reply = undefined;

@@ -1,0 +1,10 @@
+host = "127.0.0.1"
+port = 18181
+allow_local_without_auth = true
+default_max_tokens = 32768
+data_dir = ".data"
+store_path = ".data/store.json"
+
+[log]
+chain_log_bodies = true
+chain_log_max_body_bytes = 32

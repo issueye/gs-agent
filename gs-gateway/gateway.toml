@@ -4,8 +4,30 @@ dataDir = ".gateway"
 database = ".gateway/gateway.db"
 agentRoot = "../gs-agent"
 
+# 默认 agent 配置：启用后，网关启动时会自动创建 provider + agent
+# API key 优先从环境变量 GS_AGENT_API_KEY 读取，不在配置文件中保存
+[gateway.defaultAgent]
+enabled = false
+name = "default"
+modelProvider = "anthropic"
+modelName = "deepseek-v4-flash"
+baseUrl = "https://api.deepseek.com/anthropic"
+systemPrompt = "You are a concise coding agent. Before acting, analyze the user's request, identify the concrete tasks needed, and state or maintain a brief task plan. Then work through the tasks in order, using tools when useful. Complete the user's requested task and stop when you have a final answer."
+maxIterations = 10
+toolWhitelist = ["read_file", "list_dir", "grep", "todo"]
+apiKeyEnv = "GS_AGENT_API_KEY"
+
 [im]
 enabled = true
+
+# IM 出站配置：将 agent 回复发送回 IM 平台
+[im.outbound]
+enabled = true
+# 适配器：console 仅打印日志；webhook POST 到指定 URL
+adapter = "console"
+retryMax = 3
+retryDelayMs = 1000
+webhookUrl = ""
 
 [scheduler]
 enabled = true

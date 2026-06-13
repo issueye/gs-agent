@@ -1,3 +1,5 @@
+import { normalizeProtocol } from "@/services/protocols";
+
 function trim(value) {
   return String(value || "").trim();
 }
@@ -64,26 +66,30 @@ function patternMatches(pattern, model) {
 }
 
 function ruleMatches(rule, downstream, requestedModel) {
-  if (trim(rule.match_protocol) !== "" && trim(rule.match_protocol) !== downstream) {
+  let matchProtocol = normalizeProtocol(rule.match_protocol);
+  if (trim(matchProtocol) !== "" && trim(matchProtocol) !== normalizeProtocol(downstream)) {
     return false;
   }
   return patternMatches(rule.match_model_pattern, requestedModel);
 }
 
 function makeRoute(name, provider, upstreamProtocol, model, source, priority, maxTokens) {
+  let routeProvider = provider || {};
+  routeProvider.protocol = normalizeProtocol(routeProvider.protocol);
   return {
     name: name,
-    upstream_protocol: upstreamProtocol || provider.protocol,
+    upstream_protocol: normalizeProtocol(upstreamProtocol || routeProvider.protocol),
     model: model,
     default_max_tokens: maxTokens,
     source: source,
     priority: priority || 0,
-    provider: provider,
+    provider: routeProvider,
   };
 }
 
 export function createRouteResolver(store, config) {
   function resolve(downstream, requestedModel) {
+    downstream = normalizeProtocol(downstream);
     let modelName = trim(requestedModel);
     if (modelName.indexOf("/") > 0) {
       let parts = modelName.split("/");
@@ -117,7 +123,7 @@ export function createRouteResolver(store, config) {
       if (!model) {
         throw "routing rule " + rule.name + " targets missing or disabled model " + targetModel + " for provider " + provider.name;
       }
-      return makeRoute(rule.name, provider, trim(rule.upstream_protocol) || provider.protocol, model.name, "routing_rule:" + rule.id, rule.priority, model.max_tokens || config.defaultMaxTokens);
+      return makeRoute(rule.name, provider, normalizeProtocol(trim(rule.upstream_protocol) || provider.protocol), model.name, "routing_rule:" + rule.id, rule.priority, model.max_tokens || config.defaultMaxTokens);
     }
 
     if (modelName === "") {

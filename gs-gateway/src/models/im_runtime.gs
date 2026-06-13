@@ -2,6 +2,19 @@ function now() {
   return (new Date()).toISOString();
 }
 
+function mergeObject(base, extra) {
+  let out = {};
+  for (let key in base) {
+    out[key] = base[key];
+  }
+  if (extra) {
+    for (let key in extra) {
+      out[key] = extra[key];
+    }
+  }
+  return out;
+}
+
 function textValue(value) {
   if (value === undefined || value === null) {
     return "";
@@ -51,8 +64,17 @@ export function createIMRuntime(gateway) {
   }
 
   function ensureChannel(input) {
+    let defaultAdapter = "console";
+    if (gateway.config && gateway.config.im && gateway.config.im.outbound) {
+      defaultAdapter = gateway.config.im.outbound.adapter || defaultAdapter;
+    }
     let channel = store.getIMChannel(input.channelId);
     if (channel) {
+      if (!channel.config || !channel.config.outboundAdapter) {
+        return store.updateIMChannel(input.channelId, {
+          config: mergeObject(channel.config || {}, { outboundAdapter: defaultAdapter }),
+        });
+      }
       return channel;
     }
     return store.createIMChannel({
@@ -60,7 +82,9 @@ export function createIMRuntime(gateway) {
       platform: input.platform,
       adapter: input.adapter,
       name: input.platform + "/" + input.adapter,
-      config: {},
+      config: {
+        outboundAdapter: defaultAdapter,
+      },
     });
   }
 

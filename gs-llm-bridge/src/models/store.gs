@@ -1,6 +1,7 @@
 let fs = require("@std/fs");
 let path = require("@std/path");
 let crypto = require("@std/crypto");
+import { normalizeProtocol } from "@/services/protocols";
 
 function now() {
   return (new Date()).toISOString();
@@ -275,7 +276,7 @@ export function openBridgeStore(file, config) {
       return {
         id: id,
         name: String(body.name || existing.name || id),
-        protocol: String(body.protocol || existing.protocol || "openai_chat"),
+        protocol: normalizeProtocol(body.protocol || existing.protocol || "openai_chat"),
         vendor: String(body.vendor || existing.vendor || "openai"),
         base_url: String(body.base_url || body.baseUrl || existing.base_url || ""),
         api_key: apiKey,
@@ -382,7 +383,7 @@ export function openBridgeStore(file, config) {
       return {
         id: id,
         path: normalizeEndpointPath(body.path || existing.path || ""),
-        downstream_protocol: String(body.downstream_protocol || body.downstreamProtocol || existing.downstream_protocol || "openai_chat"),
+        downstream_protocol: normalizeProtocol(body.downstream_protocol || body.downstreamProtocol || existing.downstream_protocol || "openai_chat"),
         enabled: body.enabled === false ? false : (existing.enabled === false ? false : true),
         protected: body.protected === false ? false : (existing.protected === false ? false : true),
         description: String(body.description || existing.description || ""),
@@ -429,9 +430,9 @@ export function openBridgeStore(file, config) {
         id: id,
         name: String(body.name || existing.name || id),
         priority: Number(body.priority || existing.priority || 100),
-        match_protocol: String(body.match_protocol || body.matchProtocol || existing.match_protocol || ""),
+        match_protocol: normalizeProtocol(body.match_protocol || body.matchProtocol || existing.match_protocol || ""),
         match_model_pattern: String(body.match_model_pattern || body.matchModelPattern || existing.match_model_pattern || "*"),
-        upstream_protocol: String(body.upstream_protocol || body.upstreamProtocol || existing.upstream_protocol || ""),
+        upstream_protocol: normalizeProtocol(body.upstream_protocol || body.upstreamProtocol || existing.upstream_protocol || ""),
         target_provider_id: String(body.target_provider_id || body.targetProviderId || body.targetProviderID || existing.target_provider_id || ""),
         target_model: String(body.target_model || body.targetModel || existing.target_model || ""),
         enabled: body.enabled === false ? false : (existing.enabled === false ? false : true),

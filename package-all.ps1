@@ -72,7 +72,9 @@ Copy-Item gs-gateway\public "$DistDir\gateway\public" -Recurse
 # Copy agent runtime used by the gateway bridge.
 Copy-Item dist\gs-agent.exe "$DistDir\gateway\gs-agent\"
 Copy-Item gs-agent\src "$DistDir\gateway\gs-agent\src" -Recurse
-Copy-Item gs-agent\programs "$DistDir\gateway\gs-agent\programs" -Recurse
+if (Test-Path gs-agent\programs) {
+    Copy-Item gs-agent\programs "$DistDir\gateway\gs-agent\programs" -Recurse
+}
 Copy-Item gs-agent\main.gs "$DistDir\gateway\gs-agent\"
 Copy-Item gs-agent\gateway-task.gs "$DistDir\gateway\gs-agent\"
 Copy-Item gs-agent\project.toml "$DistDir\gateway\gs-agent\"
@@ -87,8 +89,26 @@ dataDir = ".gateway"
 database = ".gateway/gateway.db"
 agentRoot = "./gs-agent"
 
+[gateway.defaultAgent]
+enabled = false
+name = "default"
+modelProvider = "anthropic"
+modelName = "deepseek-v4-flash"
+baseUrl = "https://api.deepseek.com/anthropic"
+systemPrompt = "You are a concise coding agent. Before acting, analyze the user's request, identify the concrete tasks needed, and state or maintain a brief task plan. Then work through the tasks in order, using tools when useful. Complete the user's requested task and stop when you have a final answer."
+maxIterations = 10
+toolWhitelist = ["read_file", "list_dir", "grep", "todo"]
+apiKeyEnv = "GS_AGENT_API_KEY"
+
 [im]
 enabled = true
+
+[im.outbound]
+enabled = true
+adapter = "console"
+retryMax = 3
+retryDelayMs = 1000
+webhookUrl = ""
 
 [scheduler]
 enabled = true

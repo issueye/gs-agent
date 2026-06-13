@@ -30,7 +30,7 @@ gs-gateway/
 
 ```powershell
 cd E:\codes\gts_codes\gs-gateway
-E:\codes\gts\dist\gs.exe --timeout 0 run
+E:\codes\gts_codes\gts\gs.exe --timeout 0 run
 ```
 
 默认监听：
@@ -131,7 +131,7 @@ docs/im-scheduler-gateway-design.md
 
 ```powershell
 cd E:\codes\gts_codes\gs-gateway
-E:\codes\gts\dist\gs.exe --timeout 20s smoke-test.gs
+E:\codes\gts_codes\gts\gs.exe --timeout 20s smoke-test.gs
 ```
 
 当前 smoke test 会验证网关记录、技能管理、调度和真实 agent 桥接错误处理。

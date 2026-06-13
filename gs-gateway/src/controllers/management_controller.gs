@@ -45,7 +45,7 @@ function instanceConfig(agent, provider, input) {
     port: 0,
     pid: 0,
     lastHeartbeatAt: (new Date()).toISOString(),
-    lastError: provider ? "" : "未匹配到可用供应商",
+    lastError: provider ? "real process launch not yet implemented" : "未匹配到可用供应商",
     inflight: 0,
   };
 }

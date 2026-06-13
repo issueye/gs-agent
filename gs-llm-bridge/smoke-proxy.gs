@@ -18,6 +18,19 @@ let onlyStreamProviderId = "smoke-proxy-only-stream-provider-" + suffix;
 let onlyStreamModelId = "smoke-proxy-only-stream-model-" + suffix;
 let onlyStreamRuleId = "smoke-proxy-only-stream-rule-" + suffix;
 let onlyStreamRequestModel = "smoke-proxy-only-stream-request-" + suffix;
+let hyphenProviderId = "smoke-proxy-hyphen-provider-" + suffix;
+let hyphenModelId = "smoke-proxy-hyphen-model-" + suffix;
+let hyphenRuleId = "smoke-proxy-hyphen-rule-" + suffix;
+let hyphenRequestModel = "smoke-proxy-hyphen-request-" + suffix;
+let disabledProviderId = "smoke-proxy-disabled-provider-" + suffix;
+let disabledProviderModelId = "smoke-proxy-disabled-provider-model-" + suffix;
+let disabledProviderRuleId = "smoke-proxy-disabled-provider-rule-" + suffix;
+let disabledProviderRequestModel = "smoke-proxy-disabled-provider-request-" + suffix;
+let disabledModelId = "smoke-proxy-disabled-model-" + suffix;
+let disabledModelRuleId = "smoke-proxy-disabled-model-rule-" + suffix;
+let disabledModelRequestModel = "smoke-proxy-disabled-model-request-" + suffix;
+let defaultRuleId = "smoke-proxy-default-rule-" + suffix;
+let defaultRequestModel = "smoke-proxy-default-request-" + suffix;
 
 let anthropicProviderId = "smoke-proxy-anthropic-provider-" + suffix;
 let anthropicModelId = "smoke-proxy-anthropic-model-" + suffix;
@@ -224,6 +237,19 @@ app.post("/v1/chat/completions", function(req, res) {
   for (let message of body.messages || []) {
     messageText = messageText + contentText(message.content);
   }
+  if (messageText.indexOf("unsafe headers") >= 0) {
+    res.setHeader("Content-Encoding", "gzip");
+    res.setHeader("Content-Range", "bytes 0-10/20");
+    res.setHeader("Proxy-Authenticate", "Basic realm=\"upstream\"");
+  }
+  if (messageText.indexOf("slow down") >= 0) {
+    return res.status(429).json({
+      error: {
+        type: "rate_limit_error",
+        message: "slow down",
+      },
+    });
+  }
   if (body.stream === true && messageText.indexOf("json fallback") >= 0) {
     return res.json({
       id: "chatcmpl-json-fallback-" + suffix,
@@ -351,6 +377,24 @@ app.post("/v1/messages", function(req, res) {
     });
   }
   let firstAnthropicMessage = (body.messages || [])[0] || {};
+  if (body.stream === true && String(firstAnthropicMessage.content || "").indexOf("json fallback") >= 0) {
+    return res.json({
+      id: "msg-json-fallback-" + suffix,
+      type: "message",
+      role: "assistant",
+      model: body.model,
+      content: [{
+        type: "text",
+        text: "anthropic json fallback ok",
+      }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: {
+        input_tokens: 23,
+        output_tokens: 11,
+      },
+    });
+  }
   if (body.stream === true && String(firstAnthropicMessage.content || "").indexOf("tool") >= 0) {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -464,6 +508,27 @@ app.post("/v1/responses", function(req, res) {
         "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-tool-stream-" + suffix + "\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"" + body.model + "\",\"output\":[]}}\n\n"
       ));
     }
+    if (inputText.indexOf("json fallback") >= 0) {
+      return res.json({
+        id: "resp-json-fallback-" + suffix,
+        object: "response",
+        status: "completed",
+        model: body.model,
+        output: [{
+          type: "message",
+          role: "assistant",
+          content: [{
+            type: "output_text",
+            text: "responses json fallback ok",
+          }],
+        }],
+        usage: {
+          input_tokens: 27,
+          output_tokens: 12,
+          total_tokens: 39,
+        },
+      });
+    }
     return res.stream(stream.fromString(
       "event: response.created\n" +
       "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-stream-" + suffix + "\",\"object\":\"response\",\"status\":\"in_progress\",\"model\":\"" + body.model + "\",\"output\":[]}}\n\n" +
@@ -525,12 +590,21 @@ function cleanup() {
   deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(responsesRuleId));
   deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(responsesFromChatRuleId));
   deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(responsesFromAnthropicRuleId));
+  deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(hyphenRuleId));
+  deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(disabledProviderRuleId));
+  deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(disabledModelRuleId));
+  deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(defaultRuleId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(openAIProviderId) + "/models/" + encodeURIComponent(openAIModelId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(onlyStreamProviderId) + "/models/" + encodeURIComponent(onlyStreamModelId));
+  deleteIfExists("/api/v1/providers/" + encodeURIComponent(hyphenProviderId) + "/models/" + encodeURIComponent(hyphenModelId));
+  deleteIfExists("/api/v1/providers/" + encodeURIComponent(disabledProviderId) + "/models/" + encodeURIComponent(disabledProviderModelId));
+  deleteIfExists("/api/v1/providers/" + encodeURIComponent(openAIProviderId) + "/models/" + encodeURIComponent(disabledModelId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(anthropicProviderId) + "/models/" + encodeURIComponent(anthropicModelId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(responsesProviderId) + "/models/" + encodeURIComponent(responsesModelId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(openAIProviderId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(onlyStreamProviderId));
+  deleteIfExists("/api/v1/providers/" + encodeURIComponent(hyphenProviderId));
+  deleteIfExists("/api/v1/providers/" + encodeURIComponent(disabledProviderId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(anthropicProviderId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(responsesProviderId));
 }
@@ -588,6 +662,17 @@ try {
     target_model: openAITargetModel,
     enabled: true,
   });
+  data("POST", "/api/v1/routing-rules", {
+    id: defaultRuleId,
+    name: "Smoke Proxy Default Rule",
+    priority: 99,
+    match_protocol: "openai_chat",
+    match_model_pattern: "*",
+    upstream_protocol: "openai_chat",
+    target_provider_id: openAIProviderId,
+    target_model: openAITargetModel,
+    enabled: true,
+  });
   data("POST", "/api/v1/providers", {
     id: onlyStreamProviderId,
     name: "Smoke Proxy Only Stream Provider",
@@ -613,6 +698,79 @@ try {
     upstream_protocol: "openai_chat",
     target_provider_id: onlyStreamProviderId,
     target_model: openAITargetModel,
+    enabled: true,
+  });
+  let hyphenProvider = data("POST", "/api/v1/providers", {
+    id: hyphenProviderId,
+    name: "Smoke Proxy Hyphen Provider",
+    protocol: "openai-chat",
+    vendor: "openai",
+    base_url: mockBase,
+    api_key: "sk-mock-hyphen",
+    enabled: true,
+  });
+  assert(hyphenProvider.protocol === "openai_chat", "Hyphen provider protocol should normalize: " + JSON.stringify(hyphenProvider));
+  data("POST", "/api/v1/providers/" + encodeURIComponent(hyphenProviderId) + "/models", {
+    id: hyphenModelId,
+    name: openAITargetModel,
+    max_tokens: 4096,
+    enabled: true,
+  });
+  let hyphenRule = data("POST", "/api/v1/routing-rules", {
+    id: hyphenRuleId,
+    name: "Smoke Proxy Hyphen Protocol Rule",
+    priority: 1,
+    match_protocol: "openai-chat",
+    match_model_pattern: hyphenRequestModel,
+    upstream_protocol: "openai-chat",
+    target_provider_id: hyphenProviderId,
+    target_model: openAITargetModel,
+    enabled: true,
+  });
+  assert(hyphenRule.match_protocol === "openai_chat", "Hyphen rule match protocol should normalize: " + JSON.stringify(hyphenRule));
+  assert(hyphenRule.upstream_protocol === "openai_chat", "Hyphen rule upstream protocol should normalize: " + JSON.stringify(hyphenRule));
+
+  data("POST", "/api/v1/providers", {
+    id: disabledProviderId,
+    name: "Smoke Proxy Disabled Provider",
+    protocol: "openai_chat",
+    vendor: "openai",
+    base_url: mockBase,
+    api_key: "sk-mock-disabled-provider",
+    enabled: false,
+  });
+  data("POST", "/api/v1/providers/" + encodeURIComponent(disabledProviderId) + "/models", {
+    id: disabledProviderModelId,
+    name: openAITargetModel,
+    max_tokens: 4096,
+    enabled: true,
+  });
+  data("POST", "/api/v1/routing-rules", {
+    id: disabledProviderRuleId,
+    name: "Smoke Proxy Disabled Provider Rule",
+    priority: 1,
+    match_protocol: "openai_chat",
+    match_model_pattern: disabledProviderRequestModel,
+    upstream_protocol: "openai_chat",
+    target_provider_id: disabledProviderId,
+    target_model: openAITargetModel,
+    enabled: true,
+  });
+  data("POST", "/api/v1/providers/" + encodeURIComponent(openAIProviderId) + "/models", {
+    id: disabledModelId,
+    name: "smoke-disabled-target-" + suffix,
+    max_tokens: 4096,
+    enabled: false,
+  });
+  data("POST", "/api/v1/routing-rules", {
+    id: disabledModelRuleId,
+    name: "Smoke Proxy Disabled Model Rule",
+    priority: 1,
+    match_protocol: "openai_chat",
+    match_model_pattern: disabledModelRequestModel,
+    upstream_protocol: "openai_chat",
+    target_provider_id: openAIProviderId,
+    target_model: "smoke-disabled-target-" + suffix,
     enabled: true,
   });
 
@@ -762,6 +920,71 @@ try {
   let requestIDTraffic = trafficByRequestID("req-smoke-fixed-" + suffix);
   assert(requestIDTraffic !== undefined, "X-Request-ID should be preserved in traffic: traffic=" + JSON.stringify(trafficSnapshot()) + " lastMock=" + JSON.stringify(mockRequests[mockRequests.length - 1] || {}));
 
+  let routePlan = data("GET", "/api/v1/runtime/route-plan?protocol=openai_chat&model=" + encodeURIComponent(openAIRequestModel));
+  assert((routePlan.candidates || []).length === 1, "route plan should include resolved candidate: " + JSON.stringify(routePlan));
+  assert(routePlan.candidates[0].source === "routing_rule:" + openAIRuleId, "route plan should pick exact rule before default: " + JSON.stringify(routePlan));
+  assert(!("api_key" in (routePlan.candidates[0].provider || {})), "route plan should not expose provider api_key: " + JSON.stringify(routePlan));
+
+  let directRouteResponse = proxyChat({
+    model: openAIProviderId + "/" + openAITargetModel,
+    messages: [{
+      role: "user",
+      content: "hello direct route",
+    }],
+  });
+  assert(directRouteResponse.model === openAITargetModel, "Direct route response model mismatch");
+  let directRouteTraffic = latestTrafficFor(openAIProviderId + "/" + openAITargetModel);
+  assert(directRouteTraffic !== undefined, "Direct route traffic missing");
+  assert(directRouteTraffic.route_source === "direct", "Direct route should win before rules: " + JSON.stringify(directRouteTraffic));
+
+  let defaultRouteResponse = proxyChat({
+    model: defaultRequestModel,
+    messages: [{
+      role: "user",
+      content: "hello default rule",
+    }],
+  });
+  assert(defaultRouteResponse.model === openAITargetModel, "Default rule response model mismatch");
+  let defaultRouteTraffic = latestTrafficFor(defaultRequestModel);
+  assert(defaultRouteTraffic !== undefined, "Default route traffic missing");
+  assert(defaultRouteTraffic.matched_rule_id === defaultRuleId, "Default rule matched id mismatch: " + JSON.stringify(defaultRouteTraffic));
+
+  let disabledProviderResponse = http.request({
+    url: bridgeBase + "/v1/chat/completions",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + proxySecret,
+    },
+    body: {
+      model: disabledProviderRequestModel,
+      messages: [{
+        role: "user",
+        content: "hello disabled provider",
+      }],
+    },
+  });
+  assert(Number(disabledProviderResponse.status || 0) === 400, "Disabled provider route should fail: " + String(disabledProviderResponse.body || ""));
+  assert(String(disabledProviderResponse.body || "").indexOf("missing or disabled provider") >= 0, "Disabled provider error mismatch: " + String(disabledProviderResponse.body || ""));
+
+  let disabledModelResponse = http.request({
+    url: bridgeBase + "/v1/chat/completions",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + proxySecret,
+    },
+    body: {
+      model: disabledModelRequestModel,
+      messages: [{
+        role: "user",
+        content: "hello disabled model",
+      }],
+    },
+  });
+  assert(Number(disabledModelResponse.status || 0) === 400, "Disabled model route should fail: " + String(disabledModelResponse.body || ""));
+  assert(String(disabledModelResponse.body || "").indexOf("missing or disabled model") >= 0, "Disabled model error mismatch: " + String(disabledModelResponse.body || ""));
+
   let customEndpointResponse = proxyCustomChat({
     model: openAIRequestModel,
     messages: [{
@@ -772,6 +995,97 @@ try {
   assert(customEndpointResponse.object === "chat.completion", "Custom endpoint response object mismatch");
   assert(customEndpointResponse.model === openAITargetModel, "Custom endpoint response model mismatch");
   assert(customEndpointResponse.choices[0].message.content === "openai upstream ok", "Custom endpoint content mismatch");
+
+  let bodyPreviewRequestID = "req-smoke-body-preview-" + suffix;
+  let bodyPreviewResponse = http.request({
+    url: bridgeBase + "/v1/chat/completions?from=smoke",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Request-ID": bodyPreviewRequestID,
+      Authorization: "Bearer " + proxySecret,
+      "User-Agent": "smoke-proxy-agent",
+    },
+    body: {
+      model: openAIRequestModel,
+      messages: [{
+        role: "user",
+        content: "hello body preview with a deliberately long payload",
+      }],
+    },
+  });
+  assert(Number(bodyPreviewResponse.status || 0) === 200, "Body preview request status mismatch");
+  let bodyPreviewTraffic = trafficByRequestID(bodyPreviewRequestID);
+  assert(bodyPreviewTraffic !== undefined, "Body preview traffic missing");
+  assert(bodyPreviewTraffic.endpoint === "/v1/chat/completions", "Traffic endpoint should be path-only: " + JSON.stringify(bodyPreviewTraffic));
+  assert(bodyPreviewTraffic.request_body_bytes > 0, "Traffic request_body_bytes missing: " + JSON.stringify(bodyPreviewTraffic));
+  assert(String(bodyPreviewTraffic.request_body || "") !== "", "Traffic request_body preview missing; smoke requires chain_log_bodies=true: " + JSON.stringify(bodyPreviewTraffic));
+  assert(bodyPreviewTraffic.request_body_truncated === true, "Traffic request_body should be truncated by smoke config: " + JSON.stringify(bodyPreviewTraffic));
+  assert(bodyPreviewTraffic.content_type.indexOf("application/json") >= 0, "Traffic content_type mismatch: " + JSON.stringify(bodyPreviewTraffic));
+  assert(bodyPreviewTraffic.user_agent === "smoke-proxy-agent", "Traffic user_agent mismatch: " + JSON.stringify(bodyPreviewTraffic));
+
+  let corsResponse = http.request({
+    url: bridgeBase + "/v1/chat/completions",
+    method: "OPTIONS",
+    headers: {
+      Origin: "http://localhost",
+      "Access-Control-Request-Headers": "x-request-id",
+    },
+  });
+  assert(Number(corsResponse.status || 0) === 204, "CORS options status mismatch");
+  let allowedHeaders = String(corsResponse.headers["Access-Control-Allow-Headers"] || corsResponse.headers["access-control-allow-headers"] || "").toLowerCase();
+  assert(allowedHeaders.indexOf("x-request-id") >= 0, "CORS should allow x-request-id: " + JSON.stringify(corsResponse.headers || {}));
+
+  let hyphenResponse = proxyChat({
+    model: hyphenRequestModel,
+    messages: [{
+      role: "user",
+      content: "hello hyphen protocol",
+    }],
+  });
+  assert(hyphenResponse.object === "chat.completion", "Hyphen protocol response object mismatch");
+  assert(hyphenResponse.model === openAITargetModel, "Hyphen protocol response model mismatch");
+  assert(hyphenResponse.choices[0].message.content === "openai upstream ok", "Hyphen protocol content mismatch");
+
+  let upstreamErrorResponse = http.request({
+    url: bridgeBase + "/v1/chat/completions",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + proxySecret,
+    },
+    body: {
+      model: openAIRequestModel,
+      messages: [{
+        role: "user",
+        content: "please slow down",
+      }],
+    },
+  });
+  assert(Number(upstreamErrorResponse.status || 0) === 429, "Upstream error status should be preserved: " + String(upstreamErrorResponse.status || "") + " body=" + String(upstreamErrorResponse.body || ""));
+  let upstreamErrorBody = parse(upstreamErrorResponse.body, "upstream error");
+  assert(String(upstreamErrorBody.error.message || "").indexOf("upstream returned status 429") >= 0, "Upstream error should include status: " + String(upstreamErrorResponse.body || ""));
+  assert(String(upstreamErrorBody.error.message || "").indexOf("slow down") >= 0, "Upstream error should include nested message: " + String(upstreamErrorResponse.body || ""));
+
+  let unsafeHeaderResponse = http.request({
+    url: bridgeBase + "/v1/chat/completions",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + proxySecret,
+    },
+    body: {
+      model: openAIRequestModel,
+      messages: [{
+        role: "user",
+        content: "please send unsafe headers",
+      }],
+    },
+  });
+  assert(Number(unsafeHeaderResponse.status || 0) === 200, "Unsafe header response status mismatch");
+  assert(String(unsafeHeaderResponse.headers["Content-Encoding"] || unsafeHeaderResponse.headers["content-encoding"] || "") === "", "Content-Encoding should be stripped: " + JSON.stringify(unsafeHeaderResponse.headers || {}));
+  assert(String(unsafeHeaderResponse.headers["Content-Range"] || unsafeHeaderResponse.headers["content-range"] || "") === "", "Content-Range should be stripped: " + JSON.stringify(unsafeHeaderResponse.headers || {}));
+  assert(String(unsafeHeaderResponse.headers["Proxy-Authenticate"] || unsafeHeaderResponse.headers["proxy-authenticate"] || "") === "", "Proxy-* headers should be stripped: " + JSON.stringify(unsafeHeaderResponse.headers || {}));
 
   let streamResponse = proxyChatStream({
     model: openAIRequestModel,
@@ -969,6 +1283,41 @@ try {
   assert(String(jsonFallbackBody || "").indexOf("response.output_text.delta") >= 0, "JSON fallback stream missing response delta: " + String(jsonFallbackBody || ""));
   assert(String(jsonFallbackBody || "").indexOf("json fallback ok") >= 0, "JSON fallback stream missing content: " + String(jsonFallbackBody || ""));
   assert(String(jsonFallbackBody || "").indexOf("response.completed") >= 0, "JSON fallback stream missing completed event: " + String(jsonFallbackBody || ""));
+
+  let chatJSONFallbackResponse = proxyChatStream({
+    model: responsesRequestModel,
+    stream: true,
+    messages: [{
+      role: "user",
+      content: "please use json fallback",
+    }],
+  });
+  assert(Number(chatJSONFallbackResponse.status || 0) === 200, "Chat JSON fallback stream status mismatch");
+  let chatJSONFallbackBody = chatJSONFallbackResponse.body.readAll();
+  if (chatJSONFallbackResponse.close) {
+    chatJSONFallbackResponse.close();
+  }
+  assert(String(chatJSONFallbackBody || "").indexOf("chat.completion.chunk") >= 0, "Chat JSON fallback missing chat chunk: " + String(chatJSONFallbackBody || ""));
+  assert(String(chatJSONFallbackBody || "").indexOf("responses json fallback ok") >= 0, "Chat JSON fallback missing content: " + String(chatJSONFallbackBody || ""));
+  assert(String(chatJSONFallbackBody || "").indexOf("data: [DONE]") >= 0, "Chat JSON fallback missing DONE: " + String(chatJSONFallbackBody || ""));
+
+  let anthropicJSONFallbackResponse = proxyAnthropicStream({
+    model: openAIRequestModel,
+    stream: true,
+    messages: [{
+      role: "user",
+      content: "please use json fallback",
+    }],
+    max_tokens: 32,
+  });
+  assert(Number(anthropicJSONFallbackResponse.status || 0) === 200, "Anthropic JSON fallback stream status mismatch");
+  let anthropicJSONFallbackBody = anthropicJSONFallbackResponse.body.readAll();
+  if (anthropicJSONFallbackResponse.close) {
+    anthropicJSONFallbackResponse.close();
+  }
+  assert(String(anthropicJSONFallbackBody || "").indexOf("message_start") >= 0, "Anthropic JSON fallback missing message_start: " + String(anthropicJSONFallbackBody || ""));
+  assert(String(anthropicJSONFallbackBody || "").indexOf("json fallback ok") >= 0, "Anthropic JSON fallback missing content: " + String(anthropicJSONFallbackBody || ""));
+  assert(String(anthropicJSONFallbackBody || "").indexOf("message_stop") >= 0, "Anthropic JSON fallback missing message_stop: " + String(anthropicJSONFallbackBody || ""));
 
   let emptyStreamRequestID = "req-smoke-empty-stream-" + suffix;
   let emptyStreamResponse = http.request({

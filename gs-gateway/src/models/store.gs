@@ -3,6 +3,7 @@ import orm from "@std/orm";
 let fs = require("@std/fs");
 let path = require("@std/path");
 let crypto = require("@std/crypto");
+let process = require("@std/process");
 
 let TABLES = {
   events: "gateway_events",
@@ -1062,6 +1063,22 @@ export function openGatewayStore(databaseFile) {
     return rowsToRecords([findById(conn, TABLES.imReplies, id)])[0];
   }
 
+  function listIMReplies(status, limit) {
+    let n = Number(limit || 50);
+    if (status) {
+      return rowsToRecords(table(conn, TABLES.imReplies).where("status = ?", status).orderBy("created_at asc").limit(n).find());
+    }
+    return rowsToRecords(table(conn, TABLES.imReplies).orderBy("created_at desc").limit(n).find());
+  }
+
+  function getIMReply(id) {
+    let row = findById(conn, TABLES.imReplies, id);
+    if (!row) {
+      return undefined;
+    }
+    return rowsToRecords([row])[0];
+  }
+
   return {
     addEvent: addEvent,
     listEvents: listEvents,
@@ -1104,5 +1121,61 @@ export function openGatewayStore(databaseFile) {
     listIMConversationMessages: listIMConversationMessages,
     createIMReply: createIMReply,
     updateIMReply: updateIMReply,
+    listIMReplies: listIMReplies,
+    getIMReply: getIMReply,
   };
+}
+
+// 网关启动时，如果数据库中没有任何 provider/agent，且配置启用了默认 agent，
+// 则自动从环境变量读取 API key 并创建默认 provider + agent。
+export function ensureDefaultAgent(store, config) {
+  let defaultAgent = config.gateway.defaultAgent;
+  if (!defaultAgent || defaultAgent.enabled === false) {
+    return;
+  }
+
+  let apiKeyEnv = defaultAgent.apiKeyEnv || "GS_AGENT_API_KEY";
+  let apiKey = String(process.env[apiKeyEnv] || "");
+  if (!apiKey && defaultAgent.apiKey) {
+    apiKey = String(defaultAgent.apiKey);
+  }
+  if (!apiKey) {
+    console.warn("[gateway] default agent is enabled but api key is empty; set env " + apiKeyEnv);
+    return;
+  }
+
+  let providers = store.listProviders();
+  let providerId = "provider-default";
+  if (providers.length === 0) {
+    let provider = store.createProvider({
+      id: providerId,
+      name: "Default Provider",
+      type: defaultAgent.modelProvider || "anthropic",
+      enabled: true,
+      baseUrl: defaultAgent.baseUrl || "",
+      defaultModel: defaultAgent.modelName || "",
+      apiKey: apiKey,
+    });
+    providerId = provider.id;
+  } else {
+    providerId = providers[0].id;
+  }
+
+  let agents = store.listAgents();
+  if (agents.length === 0) {
+    store.createAgent({
+      id: "agent-default",
+      name: defaultAgent.name || "Default Agent",
+      providerId: providerId,
+      modelProvider: defaultAgent.modelProvider || "anthropic",
+      modelName: defaultAgent.modelName || "",
+      transport: "websocket",
+      enabled: true,
+      baseUrl: defaultAgent.baseUrl || "",
+      systemPrompt: defaultAgent.systemPrompt || "",
+      maxIterations: defaultAgent.maxIterations || 10,
+      toolWhitelist: defaultAgent.toolWhitelist || [],
+      skillIds: defaultAgent.skillIds || [],
+    });
+  }
 }

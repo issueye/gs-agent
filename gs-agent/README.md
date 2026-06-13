@@ -18,11 +18,16 @@
 - `docs/plans/2026-06-04-tui-design.md`：TUI 交互界面设计。
 - `docs/plans/2026-06-04-gs-tui-development-plan.md`：GS TUI 开发计划。
 - `docs/language-side-suggestions.md`：开发过程中沉淀的 GoScript 语言侧建议。
-- `stream-test.gs`：真实 streaming endpoint smoke test。
 
 ## 运行
 
-先在 `agent.toml` 中填入 `apiKey`。当前 DeepSeek Anthropic 兼容配置形如：
+1. 从示例配置文件创建本地配置：
+
+```powershell
+copy agent.example.toml agent.toml
+```
+
+2. 在 `agent.toml` 中填入 `apiKey`。当前 DeepSeek Anthropic 兼容配置形如：
 
 ```toml
 [agent]
@@ -52,7 +57,7 @@ thinking = "disabled"
 运行 agent：
 
 ```powershell
-E:\codes\gts\dist\gs.exe --timeout 60s run
+E:\codes\gts_codes\gts\gs.exe --timeout 60s run
 ```
 
 运行后会在 `.agent/sessions/<session-id>/` 下生成独立的 `session.jsonl` 和 `answer.md`，并把可搜索对话消息写入共享 SQLite 数据库 `.agent/session-archive.db`，不会覆盖旧会话。
@@ -62,13 +67,13 @@ E:\codes\gts\dist\gs.exe --timeout 60s run
 运行 TUI：
 
 ```powershell
-E:\codes\gts\dist\gs.exe --timeout 0 run --tui
+E:\codes\gts_codes\gts\gs.exe --timeout 0 run --tui
 ```
 
 指定已有会话继续对话：
 
 ```powershell
-E:\codes\gts\dist\gs.exe --timeout 0 run -- --session <session-id> --tui
+E:\codes\gts_codes\gts\gs.exe --timeout 0 run -- --session <session-id> --tui
 ```
 
 `--session` 也可以写成 `-s`，参数支持 session id、`.agent/sessions/<id>` 目录、`session.jsonl` 路径，或 `current` / `latest`。
@@ -104,7 +109,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -SkipSmoke
 指定解释器或输出路径：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -GsExe E:\codes\gts\dist\gs.exe -Output dist\gs-agent.exe
+powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -GsExe E:\codes\gts_codes\gts\gs.exe -Output dist\gs-agent.exe
 ```
 
 TUI 快捷键：
@@ -124,8 +129,6 @@ Git Bash/mintty 下默认只启用滚轮鼠标事件，不启用拖拽 mouse tra
 TUI 启动时会创建新的独立会话；使用 `Ctrl+O` 可加载 `.agent/current-session.json` 指向的最近会话。运行结束后最终答案会作为 `answer` 事件出现在时间线里。
 TUI 状态栏会显示 `log=.agent/logs/latest.log`，排查异常时优先查看这个文件；完整历史保留在 `.agent/logs/gs-agent.log`。
 
-## TUI 测试程序
-
 ## TUI 框架
 
 `src/tui/framework.gs` 是可复用入口，聚合了：
@@ -136,46 +139,15 @@ TUI 状态栏会显示 `log=.agent/logs/latest.log`，排查异常时优先查�
 - components：`Text`、`Input`、`Box`、`Container`、`Spacer`、`Markdown`、`Loading`，用于快速组合 Claude Code 风格的安静、紧凑型终端界面。
 - loading 组件：`loadingFrame`、`loadingText`、`compactLoading`。
 
-最小示例在 `programs/framework-demo/main.gs`，可以作为新 TUI 程序模板：
+> TUI 独立测试程序与 framework demo 正在整理中，当前可直接通过 `--tui` 参数运行主程序验证。
+
+打包后运行 TUI：
 
 ```powershell
-E:\codes\gts\dist\gs.exe --timeout 0 programs\framework-demo\main.gs
+.\dist\gs-agent.exe --tui
 ```
 
-框架级 smoke test：
-
-```powershell
-E:\codes\gts\dist\gs.exe --timeout 20s framework-smoke-test.gs
-```
-
-`programs/gs-tui-test` 是一个独立的终端测试程序，不调用模型，用来验证 GoScript 的 raw input、ANSI 渲染、resize、timer、Bracketed Paste 和可执行文件打包。
-程序运行时会进入终端备用屏幕，顶部显示响应式 ASCII banner，并包含 loading 动画组件。刷新会发生在当前窗口内；退出后恢复原 PowerShell 屏幕，滚动历史里不会堆积每一帧。渲染使用屏幕缓冲 diff，只重写变化行，避免整屏闪烁。
-
-源码自检：
-
-```powershell
-E:\codes\gts\dist\gs.exe --timeout 20s programs\gs-tui-test\main.gs --self-test
-```
-
-构建独立可执行文件：
-
-```powershell
-E:\codes\gts\dist\gs.exe --timeout 60s dist programs\gs-tui-test dist\gs-tui-test.exe
-```
-
-运行打包后的自检：
-
-```powershell
-.\dist\gs-tui-test.exe -- --self-test
-```
-
-进入交互测试：
-
-```powershell
-.\dist\gs-tui-test.exe
-```
-
-交互测试中可输入文本、方向键、Tab、粘贴、多次调整窗口大小；`Ctrl+L` 清日志，`Ctrl+Q`、`Ctrl+C` 或 `Esc` 退出。
+交互测试中可输入文本、方向键、Tab、粘贴、多次调整窗口大小；`Ctrl+Q`、`Ctrl+C` 或 `Esc` 退出。
 
 默认启用只读代码工具和 todo 任务工具：
 
@@ -240,9 +212,7 @@ exports.run = function(input) {
 - `web_fetch`：抓取 HTTP(S) 页面，返回状态码、响应头和文本内容。
 - `web_search`：通过 DuckDuckGo HTML 搜索返回结果摘要，不需要 API key。
 
-```powershell
-E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
-```
+> 动态工具 smoke test 正在恢复中。
 
 ## 网关任务入口
 
@@ -293,15 +263,7 @@ skills = ["*"]
 skills = ["code-review", "docs"]
 ```
 
-本地自检：
-
-```powershell
-E:\codes\gts\dist\gs.exe --timeout 20s skill-system-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s skill-write-guard-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s run-skill-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s run-skill-refresh-smoke-test.gs
-```
+本地自检正在恢复中。
 
 `run_skill` 工具参数：
 
@@ -347,47 +309,24 @@ includeSubagents = true
 tools = ["read_file", "list_dir", "grep", "todo", "run_subagent", "run_skill"]
 ```
 
-本地自检：
-
-```powershell
-E:\codes\gts\dist\gs.exe --timeout 20s subagent-smoke-test.gs
-```
+本地自检正在恢复中。
 
 ## 本地 smoke test
 
 不调用真实模型，只验证 agent loop、工具调用和 JSONL session：
 
 ```powershell
-E:\codes\gts\dist\gs.exe --timeout 20s smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s todo-tool-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s dynamic-tool-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s skill-system-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s create-skill-tool-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s skill-write-guard-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s child-tools-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s subagent-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s run-skill-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s run-skill-refresh-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s web-tools-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s markdown-stdlib-smoke-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s provider-test.gs
-E:\codes\gts\dist\gs.exe --timeout 20s tui-smoke-test.gs
+E:\codes\gts_codes\gts\gs.exe --timeout 20s smoke-test.gs
 ```
+
+> 其他工具级 smoke tests（todo、dynamic tool、skill system、subagent 等）正在逐步恢复中。
 
 ## 修改任务
 
 编辑 `workspace/task.txt`，然后重新运行：
 
 ```powershell
-E:\codes\gts\dist\gs.exe --timeout 60s run
-```
-
-## 流式测试
-
-`stream-test.gs` 会直接调用 Anthropic 兼容 streaming endpoint，逐块打印 SSE 文本增量：
-
-```powershell
-E:\codes\gts\dist\gs.exe --timeout 60s stream-test.gs
+E:\codes\gts_codes\gts\gs.exe --timeout 60s run
 ```
 
 ## 构建解释器
@@ -395,7 +334,7 @@ E:\codes\gts\dist\gs.exe --timeout 60s stream-test.gs
 如果需要从 GoScript 源码重新构建解释器：
 
 ```powershell
-Push-Location E:\codes\gts
+Push-Location E:\codes\gts_codes\gts
 go build -o .\dist\gs.exe .\cmd\gs
 Pop-Location
 ```

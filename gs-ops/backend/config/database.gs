@@ -108,6 +108,62 @@ export const SCHEMAS = [
       { columns: ["type"] },
     ],
   },
+  // 用户表
+  {
+    table: "users",
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "username", type: "text", notNull: true },
+      { name: "password_hash", type: "text", notNull: true },
+      { name: "role", type: "text", notNull: true }, // admin, operator, viewer
+      { name: "email", type: "text" },
+      { name: "display_name", type: "text" },
+      { name: "enabled", type: "integer", defaultValue: 1 },
+      { name: "last_login_at", type: "text" },
+      { name: "created_at", type: "text", notNull: true },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+    indexes: [
+      { columns: ["username"], unique: true },
+      { columns: ["role"] },
+    ],
+  },
+  // 审计日志表
+  {
+    table: "audit_logs",
+    columns: [
+      { name: "id", type: "text", primaryKey: true },
+      { name: "type", type: "text", notNull: true },
+      { name: "action", type: "text", notNull: true },
+      { name: "user_id", type: "text" },
+      { name: "username", type: "text" },
+      { name: "ip", type: "text" },
+      { name: "user_agent", type: "text" },
+      { name: "resource", type: "text" },
+      { name: "details", type: "text" },
+      { name: "success", type: "integer", defaultValue: 1 },
+      { name: "error_message", type: "text" },
+      { name: "created_at", type: "text", notNull: true },
+    ],
+    indexes: [
+      { columns: ["type"] },
+      { columns: ["action"] },
+      { columns: ["user_id"] },
+      { columns: ["created_at"] },
+    ],
+  },
+  // 登录安全表
+  {
+    table: "login_security",
+    columns: [
+      { name: "username", type: "text", primaryKey: true },
+      { name: "failed_attempts", type: "integer", defaultValue: 0 },
+      { name: "locked_until", type: "text" },
+      { name: "last_failed_at", type: "text" },
+      { name: "last_success_at", type: "text" },
+      { name: "updated_at", type: "text", notNull: true },
+    ],
+  },
 ];
 
 // 初始化数据库连接

@@ -2,6 +2,11 @@ import { loadConfig } from "@/config";
 import { openGatewayStore } from "@/models/store";
 import { createGatewayModel } from "@/models/gateway";
 import { buildAgentTaskPayloadForGateway, buildGatewayIMReply } from "@/models/agent_bridge";
+import { tick as outboundTick } from "@/models/im_outbound";
+
+let fs = require("@std/fs");
+let path = require("@std/path");
+
 
 function assertOK(value, message) {
   if (!value) {
@@ -28,6 +33,8 @@ function assertError(fn, code, message) {
 
 function main() {
   let config = loadConfig();
+  let smokeDb = path.join(config.root, ".gateway", "smoke-test-" + String((new Date()).getTime()) + ".db");
+  config.gateway.database = smokeDb;
   let store = openGatewayStore(config.gateway.database);
   let model = createGatewayModel(config, store);
 
@@ -60,6 +67,13 @@ function main() {
   });
   assertOK(replyInput.conversationId === received.conversation.id, "gateway reply should keep conversation id");
   assertOK(replyInput.text === "hello gateway reply", "gateway reply should use agent answer");
+
+  let imReply = store.createIMReply(replyInput);
+  assertOK(imReply.status === "pending", "IM reply should be created as pending");
+  outboundTick(store, config.im.outbound || { adapter: "console" });
+  let processedReply = store.getIMReply(imReply.id);
+  assertOK(processedReply.status === "sent", "IM outbound should send reply via console adapter");
+
   let conversations = model.im.listConversations({
     channelId: received.channel.id,
   });
@@ -197,6 +211,32 @@ function main() {
   let schedulerStatus = model.scheduler.status();
   assertOK(schedulerStatus.total >= 1, "scheduler status should include schedules");
 
+  // 为 agent bridge 测试创建一个带无效 key 的测试 agent，使其进入真实 agent 调用后失败，
+  // 验证桥接的错误处理与事件记录。生产环境应通过 /api/providers 和 /api/agents 配置真实 key。
+  let smokeSuffix = String((new Date()).getTime());
+  let testProvider = store.createProvider({
+    id: "provider-smoke-" + smokeSuffix,
+    name: "Smoke Test Provider",
+    type: "anthropic",
+    enabled: true,
+    baseUrl: "https://api.deepseek.com/anthropic",
+    defaultModel: "deepseek-v4-flash",
+    apiKey: "sk-smoke-test",
+  });
+  let testAgent = store.createAgent({
+    id: "agent-smoke-" + smokeSuffix,
+    name: "Smoke Test Agent",
+    providerId: testProvider.id,
+    modelProvider: "anthropic",
+    modelName: "deepseek-v4-flash",
+    transport: "websocket",
+    enabled: true,
+    baseUrl: "https://api.deepseek.com/anthropic",
+    systemPrompt: "You are a smoke test agent.",
+    maxIterations: 2,
+    toolWhitelist: ["read_file"],
+  });
+
   let agentTask = store.createTask({
     name: "bridge real agent",
     kind: "agent.real",
@@ -209,6 +249,7 @@ function main() {
       },
       run: {
         mode: "agent",
+        agentId: testAgent.id,
       },
     },
   });
@@ -256,6 +297,12 @@ function main() {
   println("task=" + task.id + " status=" + task.status);
   println("schedule=" + schedule.id + " tickTasks=" + String(tick.tasks.length));
   println("agentBridge=" + agentResult.id + " status=" + agentResult.status);
+
+  try {
+    fs.rmSync(smokeDb, { force: true });
+  } catch (error) {
+    // ignore cleanup errors
+  }
 }
 
 main();

@@ -75,21 +75,22 @@ Protocol naming compatibility risk:
 
 - Old Go constants use strings such as `openai-chat` in route resolver errors and likely stored values.
 - Current bridge uses `openai_chat`, `openai_responses`, and `anthropic`.
-- Replacement must either confirm old persisted data already uses underscore names, or support aliases for hyphenated protocol names at API/store boundaries.
+- Current bridge normalizes `openai-chat` to `openai_chat` and `openai-responses` to `openai_responses` at API/store/route boundaries; smoke covers hyphenated provider and routing rule input.
 
 ## Authentication
 
 Admin auth:
 
 - Old bridge allows local clients without auth when `allow_local_without_auth` is true, using loopback remote IP detection.
-- Current bridge allows missing admin key whenever `allowLocalWithoutAuth` is true, without checking client IP in controller code. This is broader than the old contract if the process is reachable from non-loopback hosts.
+- Current bridge allows missing admin key only for loopback clients when `allowLocalWithoutAuth` is true.
 - Admin key may be supplied by `x-api-key` or `Authorization: Bearer <secret>`.
 - Required scope is `admin`; `*` scope should be accepted.
+- Smoke covers disabled local-without-auth, admin/proxy scope separation, `*` scope, Bearer, and `x-api-key`.
 
 Proxy auth:
 
 - Old bridge allows local clients without auth only for loopback clients when configured.
-- Current bridge allows missing proxy key whenever `allowLocalWithoutAuth` is true, without checking client IP in service code.
+- Current bridge allows missing proxy key only for loopback clients when configured.
 - Proxy key may be supplied by `x-api-key` or `Authorization: Bearer <secret>`.
 - Required scope is `proxy`; `*` scope should be accepted.
 
@@ -99,7 +100,7 @@ Request IDs and CORS:
 - Current proxy generates a new UUID request id; health/admin CORS exposes `X-ICOO-Request-ID`, but inbound `X-Request-ID` preservation is not covered.
 - Old CORS allowed `GET,POST,PUT,DELETE,OPTIONS` and headers `Content-Type,Authorization,x-api-key,x-request-id`.
 - Current CORS allows `GET,POST,PUT,PATCH,DELETE,OPTIONS` and headers `Content-Type,Authorization,X-API-Key,anthropic-version`.
-- Replacement should preserve `x-request-id` in allowed headers unless intentionally changed.
+- Current CORS now includes `x-api-key` and `x-request-id`; smoke covers `OPTIONS` allowing `x-request-id`.
 
 ## Error Codes And Error Bodies
 
@@ -119,13 +120,12 @@ Proxy:
 - Missing upstream base URL returns 502 downstream-shaped proxy error.
 - Upstream request failures return 502 downstream-shaped proxy error.
 - Upstream non-2xx should return downstream-shaped error with the upstream status and message extracted from upstream JSON error body. Old tests assert messages include `upstream returned status <code>` and the nested message, such as `slow down`.
-- Current non-streaming upstream non-2xx sends upstream body directly. That differs from old proxy error wrapping and may leak upstream-native shape to a different downstream protocol.
+- Current bridge wraps upstream non-2xx as downstream-shaped proxy errors and extracts nested upstream messages; smoke covers `429` with `slow down`.
 
 Unsafe response headers:
 
 - Old bridge drops `Connection`, `Keep-Alive`, `Proxy-*`, `TE`, `Trailer(s)`, `Transfer-Encoding`, `Upgrade`, `Content-Encoding`, `Content-Length`, and `Content-Range` after response rewrite.
-- Current bridge only drops `content-length`, `transfer-encoding`, and `connection`.
-- Replacement should verify `Content-Encoding` and related unsafe headers are not forwarded after body conversion.
+- Current bridge strips these unsafe headers when copying upstream responses; smoke covers `Content-Encoding`, `Content-Range`, and `Proxy-*`.
 
 ## Streaming Behavior
 
@@ -144,7 +144,7 @@ Stream response contract:
 - Anthropic streams emit `message_start`, `content_block_*`, `message_delta`, and `message_stop`.
 - Responses streams emit `response.created`, `response.output_text.delta`, function-call events when applicable, and `response.completed`.
 - For OpenAI Chat downstream with `stream: true`, if upstream returns non-stream JSON chat completion, old bridge falls back to SSE chunks and includes a usage chunk when `stream_options.include_usage` is true.
-- Current bridge now converts successful non-SSE upstream bodies into downstream SSE when the client requested streaming; smoke covers Responses downstream via OpenAI Chat upstream.
+- Current bridge now converts successful non-SSE upstream bodies into downstream SSE when the client requested streaming; smoke covers Responses, Chat, and Anthropic downstream fallback paths.
 
 Stream error contract:
 
@@ -226,34 +226,27 @@ Covered by current `smoke-proxy.gs`:
 
 Current smoke gaps:
 
-- Admin auth negative cases: missing key, wrong scope, bearer vs `x-api-key`, local-without-auth remote-IP semantics.
-- Proxy auth negative cases and `*` scope acceptance.
+- Admin/proxy auth negative cases, scope separation, `*` scope, bearer, and `x-api-key` are covered with local auth disabled. Remote non-loopback semantics still require a real non-loopback network harness.
 - `X-Request-ID` inbound preservation and `X-ICOO-Request-ID` response behavior.
-- CORS `OPTIONS` and allowed headers, especially `x-request-id`.
+- CORS `OPTIONS` and `x-request-id` allowed-header behavior are covered.
 - Admin pagination metadata, including `page_size` vs `pageSize` compatibility.
 - `PUT` update paths for all admin resources.
 - Delete missing-resource status compatibility: old mostly 400 service errors vs current 404.
 - Ingress endpoint disabled/protected behavior and trailing-slash/query normalization.
-- Direct route syntax `provider/model` winning before rules.
-- Route-plan response candidate ordering and sanitized credentials.
-- Hyphenated protocol alias compatibility (`openai-chat`, `openai-responses`) if old persisted data uses it.
+- Direct route syntax `provider/model`, default `*` rule, disabled provider/model rejection, route-plan ordering, and sanitized credentials are covered.
+- Hyphenated protocol alias compatibility is covered for provider/routing-rule inputs.
 - Invalid JSON request body handling.
 - Non-POST explicit proxy 405 and dynamic non-POST 404.
-- Upstream non-2xx JSON and stream error wrapping. Stream non-2xx and invalid SSE JSON are now covered; upstream SSE `event: error` preflight is still open.
-- Unsafe response header stripping after conversion.
+- Upstream non-2xx JSON wrapping, stream non-2xx, invalid SSE JSON, and initial SSE `event: error` are covered.
+- Unsafe response header stripping after conversion is covered for representative headers.
 - Stream preflight behavior for empty streams and error events is covered for converted streams.
 - Successful JSON response fallback to downstream stream is covered for Responses downstream via OpenAI Chat upstream.
-- Traffic fields beyond tokens/status: `endpoint` path-only, body preview bytes/truncation, and broader field assertions. `client_ip`, `content_type`, `user_agent`, `route_source`, `matched_rule_id`, `matched_rule_name`, and stream error text have baseline coverage.
+- Traffic fields beyond tokens/status: `endpoint` path-only, body preview bytes/truncation, `client_ip`, `content_type`, `user_agent`, `route_source`, `matched_rule_id`, `matched_rule_name`, and stream error text have baseline coverage.
 - Stream traffic usage extraction, invalid SSE error recording, empty stream handling, and upstream `event: error` handling are covered for converted streams.
 - `only_stream` providers are covered for non-stream Chat downstream callers by aggregating upstream SSE into downstream JSON.
 
 ## Priority Checklist
 
-- [ ] Decide protocol string alias policy and add smoke for old hyphenated names if compatibility is required.
-- [ ] Add smoke for auth negative cases and local-without-auth remote semantics.
-- [ ] Add smoke for route resolution direct route, default `*` route, disabled provider/model rejection, and route-plan ordering.
-- [ ] Add smoke for JSON error-body shape compatibility and upstream non-2xx body wrapping across protocol boundaries.
-- [ ] Add smoke for traffic body preview bytes/truncation and endpoint path normalization.
-- [ ] Add smoke for request id/CORS behavior.
-- [ ] Add smoke for unsafe header stripping after converted responses.
-- [ ] Add smoke for Chat and Anthropic downstream JSON fallback to downstream SSE when downstream requested stream.
+- [ ] Add real non-loopback harness for local-without-auth remote semantics if this process will bind beyond loopback.
+- [ ] Add smoke for upstream non-2xx body wrapping across Anthropic and Responses downstreams.
+- [ ] Run migration against real old runtime SQLite files. The checked `E:\codes\icoo_proxy\icoo_llm_bridge` tree currently has no `.data` directory or `.db/.sqlite` files, and this machine has no `sqlite3` executable on PATH.
