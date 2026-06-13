@@ -1,9 +1,11 @@
 import { ProtocolAnthropic, joinUpstreamURL } from "@/services/protocols";
 import { convertRequest, convertResponse, extractUsage } from "@/services/converters";
-import { canConvertStream, convertStream } from "@/services/stream_converters";
+import { aggregateStreamResponse, canConvertStream, convertStream, streamPreflightError, streamResponseFromBody } from "@/services/stream_converters";
+import { apiKey, clientIP, headerValue, isLoopback } from "@/services/client_info";
 
 let http = require("@std/net/http/client");
 let crypto = require("@std/crypto");
+let stream = require("@std/stream");
 
 function nowMillis() {
   return Number((new Date()).getTime());
@@ -13,15 +15,25 @@ function requestID() {
   return "req-" + crypto.randomUUID();
 }
 
-function extractAPIKey(req) {
-  let headers = req.headers || {};
-  let key = headers["x-api-key"] || headers["X-API-Key"] || "";
-  if (String(key || "").trim() !== "") {
-    return String(key).trim();
+function inboundRequestID(req) {
+  let value = headerValue(req, "x-request-id").trim();
+  if (value !== "") {
+    return value;
   }
-  let auth = String(headers.authorization || headers.Authorization || "");
-  if (auth.toLowerCase().startsWith("bearer ")) {
-    return auth.slice(7).trim();
+  return requestID();
+}
+
+function matchedRuleID(route) {
+  let source = String(route ? route.source || "" : "");
+  if (source.startsWith("routing_rule:")) {
+    return source.slice("routing_rule:".length);
+  }
+  return "";
+}
+
+function matchedRuleName(route) {
+  if (matchedRuleID(route) !== "") {
+    return route.name || "";
   }
   return "";
 }
@@ -93,6 +105,10 @@ function requestWantsStream(body) {
   return body.stream === true;
 }
 
+function routeRequiresStream(route) {
+  return route && route.provider && route.provider.only_stream === true;
+}
+
 function copyResponseHeaders(res, headers) {
   if (!headers) {
     return;
@@ -103,6 +119,25 @@ function copyResponseHeaders(res, headers) {
       res.setHeader(key, headers[key]);
     }
   }
+}
+
+function headerFrom(headers, name) {
+  let wanted = String(name || "").toLowerCase();
+  for (let key in headers || {}) {
+    if (String(key).toLowerCase() === wanted) {
+      return String(headers[key] || "");
+    }
+  }
+  return "";
+}
+
+function responseIsSSE(headers) {
+  return headerFrom(headers, "content-type").toLowerCase().indexOf("text/event-stream") >= 0;
+}
+
+function requestIncludesUsageChunk(body) {
+  let options = body ? body.stream_options || body.streamOptions || {} : {};
+  return options.include_usage === true || options.includeUsage === true;
 }
 
 function bodyPreview(config, body) {
@@ -160,13 +195,15 @@ function record(config, store, req, requestIDValue, downstream, route, statusCod
     request_id: requestIDValue,
     endpoint: req.url || "",
     method: req.method || "",
-    client_ip: "",
-    user_agent: (req.headers || {})["user-agent"] || (req.headers || {})["User-Agent"] || "",
-    content_type: (req.headers || {})["content-type"] || (req.headers || {})["Content-Type"] || "",
+    client_ip: clientIP(req),
+    user_agent: headerValue(req, "user-agent"),
+    content_type: headerValue(req, "content-type"),
     downstream_protocol: downstream,
     upstream_protocol: route ? route.upstream_protocol : "",
     route_name: route ? route.name : "",
     route_source: route ? route.source : "",
+    matched_rule_id: matchedRuleID(route),
+    matched_rule_name: matchedRuleName(route),
     requested_model: requestedModel || "",
     model: route ? route.model : "",
     provider_id: provider.id || "",
@@ -184,8 +221,8 @@ function record(config, store, req, requestIDValue, downstream, route, statusCod
 
 export function createProxyService(config, store, resolver) {
   function authorize(req) {
-    let key = extractAPIKey(req);
-    if (key === "" && config.allowLocalWithoutAuth) {
+    let key = apiKey(req);
+    if (key === "" && config.allowLocalWithoutAuth && isLoopback(req)) {
       return true;
     }
     return key !== "" && store.verifyAPIKey(key, "proxy");
@@ -193,7 +230,7 @@ export function createProxyService(config, store, resolver) {
 
   function handle(req, res, downstream) {
     let started = nowMillis();
-    let rid = requestID();
+    let rid = inboundRequestID(req);
     res.setHeader("X-ICOO-Request-ID", rid);
     if (req.method !== "POST") {
       record(config, store, req, rid, downstream, undefined, 405, started, "method not allowed", "", {});
@@ -221,8 +258,13 @@ export function createProxyService(config, store, resolver) {
     }
 
     let upstreamBody = convertRequest(downstream, route.upstream_protocol, body, route.model, route.default_max_tokens);
+    if (routeRequiresStream(route)) {
+      upstreamBody.stream = true;
+    }
     try {
-      if (requestWantsStream(body) && (downstream === route.upstream_protocol || canConvertStream(downstream, route.upstream_protocol))) {
+      let wantsStream = requestWantsStream(body);
+      let shouldStream = wantsStream || routeRequiresStream(route);
+      if (shouldStream && (downstream === route.upstream_protocol || canConvertStream(downstream, route.upstream_protocol))) {
         let upstreamStream = http.stream({
           method: "POST",
           url: upstreamURL,
@@ -242,14 +284,65 @@ export function createProxyService(config, store, resolver) {
           record(config, store, req, rid, downstream, route, streamStatus, started, "upstream returned status " + String(streamStatus), requestedModel, body);
           return res.status(streamStatus).send(errorBody || "");
         }
-        record(config, store, req, rid, downstream, route, streamStatus, started, "", requestedModel, body);
+        if (wantsStream && !responseIsSSE(upstreamStream.headers)) {
+          let fallbackBody = "";
+          if (upstreamStream.body) {
+            fallbackBody = upstreamStream.body.readAll();
+          }
+          if (upstreamStream.close) {
+            upstreamStream.close();
+          }
+          let parsedFallback = responseBodyJSON(fallbackBody);
+          if (!parsedFallback) {
+            record(config, store, req, rid, downstream, route, 502, started, "upstream stream returned non-SSE response", requestedModel, body);
+            return proxyError(res, downstream, 502, "upstream stream returned non-SSE response");
+          }
+          let convertedFallback = convertResponse(downstream, route.upstream_protocol, parsedFallback, route.model);
+          record(config, store, req, rid, downstream, route, streamStatus, started, "", requestedModel, body, extractUsage(convertedFallback));
+          res.status(streamStatus);
+          res.setHeader("Content-Type", "text/event-stream");
+          res.setHeader("Cache-Control", "no-cache");
+          streamResponseFromBody(downstream, convertedFallback, res, route.model, requestIncludesUsageChunk(body));
+          return undefined;
+        }
+        if (!wantsStream && routeRequiresStream(route)) {
+          let aggregateResult = aggregateStreamResponse(route.upstream_protocol, upstreamStream, route.model) || {};
+          let aggregateBody = aggregateResult.body || {};
+          if (upstreamStream.close) {
+            upstreamStream.close();
+          }
+          let convertedBody = convertResponse(downstream, route.upstream_protocol, aggregateBody, route.model);
+          record(config, store, req, rid, downstream, route, streamStatus, started, aggregateResult.error || "", requestedModel, body, aggregateResult.usage || extractUsage(convertedBody));
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          return res.status(streamStatus).json(convertedBody);
+        }
         res.status(streamStatus);
         if (downstream === route.upstream_protocol) {
+          record(config, store, req, rid, downstream, route, streamStatus, started, "", requestedModel, body);
           return res.stream(upstreamStream.body);
+        }
+        let upstreamStreamText = "";
+        if (upstreamStream.body) {
+          upstreamStreamText = upstreamStream.body.readAll();
+        }
+        if (upstreamStream.close) {
+          upstreamStream.close();
+        }
+        let preflightError = streamPreflightError(upstreamStreamText);
+        if (preflightError !== "") {
+          record(config, store, req, rid, downstream, route, 502, started, preflightError, requestedModel, body);
+          return proxyError(res, downstream, 502, preflightError);
         }
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
-        return convertStream(downstream, route.upstream_protocol, upstreamStream, res, route.model);
+        let replayStream = {
+          status: streamStatus,
+          headers: upstreamStream.headers || {},
+          body: stream.fromString(upstreamStreamText),
+        };
+        let streamResult = convertStream(downstream, route.upstream_protocol, replayStream, res, route.model) || {};
+        record(config, store, req, rid, downstream, route, streamStatus, started, streamResult.error || "", requestedModel, body, streamResult.usage || {});
+        return undefined;
       }
 
       let upstream = http.request({

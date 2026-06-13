@@ -1,0 +1,11 @@
+[
+  {
+    "id": "op-seed-001",
+    "serviceId": "gateway",
+    "operation": "status",
+    "status": "success",
+    "message": "initial service inventory loaded",
+    "operator": "system",
+    "timestamp": "2026-06-12T00:00:00.000Z"
+  }
+]

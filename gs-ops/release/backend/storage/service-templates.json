@@ -1,0 +1,92 @@
+[
+  {
+    "id": "binary",
+    "name": "二进制服务",
+    "type": "binary",
+    "description": "管理本地可执行程序，并使用显式命令控制启动和停止。",
+    "defaults": {
+      "version": "0.1.0",
+      "installPath": "../services/app",
+      "configPath": "../services/app/config.toml",
+      "logPath": "../services/app/logs",
+      "port": 8080,
+      "autoStart": false,
+      "commands": {
+        "install": "make install",
+        "start": "${name}.exe",
+        "stop": "taskkill /PID ${pid} /F",
+        "restart": "restart",
+        "status": "status",
+        "uninstall": "make uninstall"
+      },
+      "environment": {
+        "SERVICE_PORT": "${port}"
+      },
+      "healthCheck": {
+        "enabled": true,
+        "interval": 30,
+        "url": "http://127.0.0.1:${port}/health"
+      }
+    }
+  },
+  {
+    "id": "docker",
+    "name": "Docker 容器",
+    "type": "docker",
+    "description": "注册通过 Docker 命令控制的容器化服务。",
+    "defaults": {
+      "version": "latest",
+      "installPath": "./docker",
+      "configPath": "./docker/.env",
+      "logPath": "./docker/logs",
+      "port": 8081,
+      "autoStart": true,
+      "commands": {
+        "install": "docker compose pull",
+        "start": "docker compose up -d ${name}",
+        "stop": "docker compose stop ${name}",
+        "restart": "docker compose restart ${name}",
+        "status": "docker compose ps ${name}",
+        "uninstall": "docker compose rm -sf ${name}"
+      },
+      "environment": {
+        "SERVICE_PORT": "${port}"
+      },
+      "healthCheck": {
+        "enabled": true,
+        "interval": 30,
+        "url": "http://127.0.0.1:${port}/health"
+      }
+    }
+  },
+  {
+    "id": "systemd",
+    "name": "Systemd 单元",
+    "type": "systemd",
+    "description": "管理 Linux systemd 单元，并使用标准 service 命令控制。",
+    "defaults": {
+      "version": "1.0.0",
+      "installPath": "/usr/local/bin",
+      "configPath": "/etc/${name}/config.toml",
+      "logPath": "/var/log/${name}",
+      "port": 8082,
+      "autoStart": true,
+      "commands": {
+        "install": "systemctl enable ${name}",
+        "start": "systemctl start ${name}",
+        "stop": "systemctl stop ${name}",
+        "restart": "systemctl restart ${name}",
+        "status": "systemctl status ${name}",
+        "uninstall": "systemctl disable ${name}"
+      },
+      "environment": {
+        "SERVICE_PORT": "${port}"
+      },
+      "healthCheck": {
+        "enabled": true,
+        "interval": 30,
+        "url": "http://127.0.0.1:${port}/health"
+      }
+    }
+  }
+]

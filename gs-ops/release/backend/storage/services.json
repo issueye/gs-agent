@@ -1,0 +1,73 @@
+[
+  {
+    "id": "gateway",
+    "name": "gs-gateway",
+    "displayName": "GS Gateway",
+    "description": "统一 API 网关服务",
+    "version": "0.1.0",
+    "status": "running",
+    "type": "binary",
+    "installPath": "../gs-gateway",
+    "configPath": "../gs-gateway/config.toml",
+    "logPath": "../gs-gateway/logs",
+    "port": 8080,
+    "pid": 45210,
+    "uptime": 86400,
+    "autoStart": true,
+    "dependencies": ["llm-bridge"],
+    "commands": {
+      "install": "make install",
+      "start": "gs-gateway.exe",
+      "stop": "taskkill /PID ${pid} /F",
+      "restart": "restart",
+      "status": "status",
+      "uninstall": "make uninstall"
+    },
+    "environment": {
+      "GATEWAY_PORT": "8080"
+    },
+    "healthCheck": {
+      "enabled": true,
+      "interval": 30,
+      "url": "http://127.0.0.1:8080/health"
+    },
+    "createdAt": "2026-06-12T00:00:00.000Z",
+    "updatedAt": "2026-06-12T00:00:00.000Z"
+  },
+  {
+    "id": "llm-bridge",
+    "name": "gs-llm-bridge",
+    "displayName": "GS LLM Bridge",
+    "description": "大模型接入桥接服务",
+    "version": "0.1.0",
+    "status": "stopped",
+    "type": "binary",
+    "installPath": "../gs-llm-bridge",
+    "configPath": "../gs-llm-bridge/config.toml",
+    "logPath": "../gs-llm-bridge/logs",
+    "port": 8090,
+    "pid": null,
+    "uptime": 0,
+    "autoStart": false,
+    "dependencies": [],
+    "commands": {
+      "install": "make install",
+      "start": "gs-llm-bridge.exe",
+      "stop": "taskkill /PID ${pid} /F",
+      "restart": "restart",
+      "status": "status",
+      "uninstall": "make uninstall"
+    },
+    "environment": {
+      "BRIDGE_PORT": "8090"
+    },
+    "healthCheck": {
+      "enabled": true,
+      "interval": 30,
+      "url": "http://127.0.0.1:8090/health"
+    },
+    "createdAt": "2026-06-12T00:00:00.000Z",
+    "updatedAt": "2026-06-12T00:00:00.000Z"
+  }
+]
+

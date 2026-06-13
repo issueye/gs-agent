@@ -1,20 +1,8 @@
 import { ok, created, fail, page } from "@/views/response";
+import { apiKey, isLoopback } from "@/services/client_info";
 
 function notFound(res, message) {
   return fail(res, 404, "NOT_FOUND", message);
-}
-
-function apiKey(req) {
-  let headers = req.headers || {};
-  let key = headers["x-api-key"] || headers["X-API-Key"] || "";
-  if (String(key || "").trim() !== "") {
-    return String(key).trim();
-  }
-  let auth = String(headers.authorization || headers.Authorization || "");
-  if (auth.toLowerCase().startsWith("bearer ")) {
-    return auth.slice(7).trim();
-  }
-  return "";
 }
 
 function param(req, snake, camel) {
@@ -27,7 +15,7 @@ export function createAdminController(model) {
 
   function auth(req, res, next) {
     let key = apiKey(req);
-    if (key === "" && model.config.allowLocalWithoutAuth) {
+    if (key === "" && model.config.allowLocalWithoutAuth && isLoopback(req)) {
       return next();
     }
     if (key !== "" && store.verifyAPIKey(key, "admin")) {

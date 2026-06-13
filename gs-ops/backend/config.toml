@@ -1,0 +1,12 @@
+[server]
+host = "127.0.0.1"
+port = 7310
+
+[storage]
+services = "storage/services.json"
+operation_logs = "storage/operation-logs.json"
+
+[auth]
+enabled = false
+token = "dev-token"
+

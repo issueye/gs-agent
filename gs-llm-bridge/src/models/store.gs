@@ -208,6 +208,24 @@ function removeByID(items, id) {
   return undefined;
 }
 
+function normalizeEndpointPath(value) {
+  let text = String(value || "").trim();
+  let queryIndex = text.indexOf("?");
+  if (queryIndex >= 0) {
+    text = text.slice(0, queryIndex);
+  }
+  if (text === "") {
+    return "";
+  }
+  if (!text.startsWith("/")) {
+    text = "/" + text;
+  }
+  while (text.length > 1 && text.endsWith("/")) {
+    text = text.slice(0, text.length - 1);
+  }
+  return text;
+}
+
 export function openBridgeStore(file, config) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   let state = readState(file, config);
@@ -343,6 +361,19 @@ export function openBridgeStore(file, config) {
     return sortByUpdated(state.endpoints);
   }
 
+  function findEnabledEndpointByPath(endpointPath) {
+    let expected = normalizeEndpointPath(endpointPath);
+    for (let item of state.endpoints || []) {
+      if (item.enabled === false) {
+        continue;
+      }
+      if (normalizeEndpointPath(item.path) === expected) {
+        return clone(item);
+      }
+    }
+    return undefined;
+  }
+
   function saveEndpoint(input) {
     let body = input || {};
     let id = String(body.id || ("endpoint-" + slug(body.path || "endpoint", "endpoint")));
@@ -350,7 +381,7 @@ export function openBridgeStore(file, config) {
     let item = upsertByID(state.endpoints, id, function(existing) {
       return {
         id: id,
-        path: String(body.path || existing.path || ""),
+        path: normalizeEndpointPath(body.path || existing.path || ""),
         downstream_protocol: String(body.downstream_protocol || body.downstreamProtocol || existing.downstream_protocol || "openai_chat"),
         enabled: body.enabled === false ? false : (existing.enabled === false ? false : true),
         protected: body.protected === false ? false : (existing.protected === false ? false : true),
@@ -518,6 +549,7 @@ export function openBridgeStore(file, config) {
     saveProviderModel: saveProviderModel,
     deleteProviderModel: deleteProviderModel,
     listEndpoints: listEndpoints,
+    findEnabledEndpointByPath: findEnabledEndpointByPath,
     saveEndpoint: saveEndpoint,
     deleteEndpoint: deleteEndpoint,
     listRoutingRules: listRoutingRules,

@@ -14,6 +14,10 @@ let openAITargetModel = "smoke-target-openai-" + suffix;
 let openAIRuleId = "smoke-proxy-openai-rule-" + suffix;
 let openAIAnthropicRuleId = "smoke-proxy-openai-anthropic-rule-" + suffix;
 let openAIRequestModel = "smoke-proxy-openai-request-" + suffix;
+let onlyStreamProviderId = "smoke-proxy-only-stream-provider-" + suffix;
+let onlyStreamModelId = "smoke-proxy-only-stream-model-" + suffix;
+let onlyStreamRuleId = "smoke-proxy-only-stream-rule-" + suffix;
+let onlyStreamRequestModel = "smoke-proxy-only-stream-request-" + suffix;
 
 let anthropicProviderId = "smoke-proxy-anthropic-provider-" + suffix;
 let anthropicModelId = "smoke-proxy-anthropic-model-" + suffix;
@@ -26,15 +30,22 @@ let responsesModelId = "smoke-proxy-responses-model-" + suffix;
 let responsesTargetModel = "smoke-target-responses-" + suffix;
 let responsesRuleId = "smoke-proxy-responses-rule-" + suffix;
 let responsesFromChatRuleId = "smoke-proxy-responses-from-chat-rule-" + suffix;
+let responsesFromAnthropicRuleId = "smoke-proxy-responses-from-anthropic-rule-" + suffix;
 let responsesRequestModel = "smoke-proxy-responses-request-" + suffix;
 let apiKeyId = "smoke-proxy-key-" + suffix;
+let customEndpointId = "smoke-proxy-endpoint-" + suffix;
+let customEndpointPath = "/v1/smoke-chat-" + suffix;
 
 let mockRequests = [];
 let app = web.createApp();
 app.use(web.json());
 
-function parse(text) {
-  return JSON.parse(String(text || "{}"));
+function parse(text, context) {
+  try {
+    return JSON.parse(String(text || "{}"));
+  } catch (err) {
+    throw new Error(String(context || "parse") + " returned non-json body: " + String(text || ""));
+  }
 }
 
 function assert(condition, message) {
@@ -60,7 +71,7 @@ function jsonRequest(method, path, body, extraHeaders) {
   }
   let res = http.request(options);
   let status = Number(res.status || 200);
-  let payload = parse(res.body);
+  let payload = parse(res.body, method + " " + path + " status=" + String(status));
   if (status < 200 || status >= 300 || payload.error) {
     throw new Error(method + " " + path + " failed: status=" + String(status) + " body=" + String(res.body || ""));
   }
@@ -77,6 +88,12 @@ function proxyChat(body) {
   });
 }
 
+function proxyCustomChat(body) {
+  return jsonRequest("POST", customEndpointPath, body, {
+    Authorization: "Bearer " + proxySecret,
+  });
+}
+
 function proxyChatStream(body) {
   return http.stream({
     url: bridgeBase + "/v1/chat/completions",
@@ -87,6 +104,16 @@ function proxyChatStream(body) {
     },
     body: body,
   });
+}
+
+function proxyChatWithHeaders(body, headers) {
+  let merged = {
+    Authorization: "Bearer " + proxySecret,
+  };
+  for (let key in headers || {}) {
+    merged[key] = headers[key];
+  }
+  return jsonRequest("POST", "/v1/chat/completions", body, merged);
 }
 
 function proxyResponses(body) {
@@ -143,6 +170,20 @@ function latestTrafficFor(model) {
   return undefined;
 }
 
+function trafficByRequestID(requestID) {
+  let traffic = data("GET", "/api/v1/traffic?limit=50");
+  for (let item of traffic.items || []) {
+    if (item.request_id === requestID) {
+      return item;
+    }
+  }
+  return undefined;
+}
+
+function trafficSnapshot() {
+  return data("GET", "/api/v1/traffic?limit=5");
+}
+
 function recordMock(path, body, headers) {
   mockRequests.push({
     path: path,
@@ -183,6 +224,49 @@ app.post("/v1/chat/completions", function(req, res) {
   for (let message of body.messages || []) {
     messageText = messageText + contentText(message.content);
   }
+  if (body.stream === true && messageText.indexOf("json fallback") >= 0) {
+    return res.json({
+      id: "chatcmpl-json-fallback-" + suffix,
+      object: "chat.completion",
+      created: 1710000000,
+      model: body.model,
+      choices: [{
+        index: 0,
+        message: {
+          role: "assistant",
+          content: "json fallback ok",
+        },
+        finish_reason: "stop",
+      }],
+      usage: {
+        prompt_tokens: 31,
+        completion_tokens: 9,
+        total_tokens: 40,
+      },
+    });
+  }
+  if (body.stream === true && messageText.indexOf("empty sse") >= 0) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    return res.stream(stream.fromString(""));
+  }
+  if (body.stream === true && messageText.indexOf("error event") >= 0) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    return res.stream(stream.fromString(
+      "event: error\n" +
+      "data: {\"error\":{\"message\":\"stream exploded\"}}\n\n"
+    ));
+  }
+  if (body.stream === true && messageText.indexOf("invalid sse") >= 0) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    return res.stream(stream.fromString(
+      "data: {\"id\":\"chatcmpl-invalid-stream-" + suffix + "\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\n" +
+      "data: this is not json\n\n" +
+      "data: [DONE]\n\n"
+    ));
+  }
   if (body.stream === true && messageText.indexOf("tool") >= 0) {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -199,7 +283,7 @@ app.post("/v1/chat/completions", function(req, res) {
     res.setHeader("Cache-Control", "no-cache");
     return res.stream(stream.fromString(
       "data: {\"id\":\"chatcmpl-stream-" + suffix + "\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\n" +
-      "data: {\"id\":\"chatcmpl-stream-" + suffix + "\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"stream ok\"},\"finish_reason\":\"stop\"}]}\n\n" +
+      "data: {\"id\":\"chatcmpl-stream-" + suffix + "\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"stream ok\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":21,\"completion_tokens\":8,\"total_tokens\":29}}\n\n" +
       "data: [DONE]\n\n"
     ));
   }
@@ -355,9 +439,31 @@ app.post("/v1/responses", function(req, res) {
       },
     });
   }
+  let inputText = "";
+  for (let item of body.input || []) {
+    inputText = inputText + JSON.stringify(item);
+  }
   if (body.stream === true) {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
+    if (inputText.indexOf("tool") >= 0) {
+      return res.stream(stream.fromString(
+        "event: response.created\n" +
+        "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-tool-stream-" + suffix + "\",\"object\":\"response\",\"status\":\"in_progress\",\"model\":\"" + body.model + "\",\"output\":[]}}\n\n" +
+        "event: response.output_item.added\n" +
+        "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"id\":\"fc_weather_" + suffix + "\",\"type\":\"function_call\",\"call_id\":\"call_weather_" + suffix + "\",\"name\":\"get_weather\",\"arguments\":\"\"}}\n\n" +
+        "event: response.function_call_arguments.delta\n" +
+        "data: {\"type\":\"response.function_call_arguments.delta\",\"item_id\":\"fc_weather_" + suffix + "\",\"output_index\":0,\"delta\":\"{\\\"city\\\":\"}\n\n" +
+        "event: response.function_call_arguments.delta\n" +
+        "data: {\"type\":\"response.function_call_arguments.delta\",\"item_id\":\"fc_weather_" + suffix + "\",\"output_index\":0,\"delta\":\"\\\"Shanghai\\\"}\"}\n\n" +
+        "event: response.function_call_arguments.done\n" +
+        "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"fc_weather_" + suffix + "\",\"output_index\":0,\"arguments\":\"{\\\"city\\\":\\\"Shanghai\\\"}\"}\n\n" +
+        "event: response.output_item.done\n" +
+        "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"id\":\"fc_weather_" + suffix + "\",\"type\":\"function_call\",\"call_id\":\"call_weather_" + suffix + "\",\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Shanghai\\\"}\"}}\n\n" +
+        "event: response.completed\n" +
+        "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-tool-stream-" + suffix + "\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"" + body.model + "\",\"output\":[]}}\n\n"
+      ));
+    }
     return res.stream(stream.fromString(
       "event: response.created\n" +
       "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-stream-" + suffix + "\",\"object\":\"response\",\"status\":\"in_progress\",\"model\":\"" + body.model + "\",\"output\":[]}}\n\n" +
@@ -366,10 +472,6 @@ app.post("/v1/responses", function(req, res) {
       "event: response.completed\n" +
       "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-stream-" + suffix + "\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"" + body.model + "\",\"output\":[]}}\n\n"
     ));
-  }
-  let inputText = "";
-  for (let item of body.input || []) {
-    inputText = inputText + JSON.stringify(item);
   }
   if (inputText.indexOf("tool") >= 0) {
     return res.json({
@@ -415,16 +517,20 @@ let mockServer = app.listen(0);
 let mockBase = "http://127.0.0.1:" + String(mockServer.port);
 
 function cleanup() {
+  deleteIfExists("/api/v1/ingress-endpoints/" + encodeURIComponent(customEndpointId));
   deleteIfExists("/api/v1/api-keys/" + encodeURIComponent(apiKeyId));
   deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(openAIRuleId));
   deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(openAIAnthropicRuleId));
   deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(anthropicRuleId));
   deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(responsesRuleId));
   deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(responsesFromChatRuleId));
+  deleteIfExists("/api/v1/routing-rules/" + encodeURIComponent(responsesFromAnthropicRuleId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(openAIProviderId) + "/models/" + encodeURIComponent(openAIModelId));
+  deleteIfExists("/api/v1/providers/" + encodeURIComponent(onlyStreamProviderId) + "/models/" + encodeURIComponent(onlyStreamModelId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(anthropicProviderId) + "/models/" + encodeURIComponent(anthropicModelId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(responsesProviderId) + "/models/" + encodeURIComponent(responsesModelId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(openAIProviderId));
+  deleteIfExists("/api/v1/providers/" + encodeURIComponent(onlyStreamProviderId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(anthropicProviderId));
   deleteIfExists("/api/v1/providers/" + encodeURIComponent(responsesProviderId));
 }
@@ -479,6 +585,33 @@ try {
     match_model_pattern: openAIRequestModel,
     upstream_protocol: "openai_chat",
     target_provider_id: openAIProviderId,
+    target_model: openAITargetModel,
+    enabled: true,
+  });
+  data("POST", "/api/v1/providers", {
+    id: onlyStreamProviderId,
+    name: "Smoke Proxy Only Stream Provider",
+    protocol: "openai_chat",
+    vendor: "openai",
+    base_url: mockBase,
+    api_key: "sk-mock-only-stream",
+    only_stream: true,
+    enabled: true,
+  });
+  data("POST", "/api/v1/providers/" + encodeURIComponent(onlyStreamProviderId) + "/models", {
+    id: onlyStreamModelId,
+    name: openAITargetModel,
+    max_tokens: 4096,
+    enabled: true,
+  });
+  data("POST", "/api/v1/routing-rules", {
+    id: onlyStreamRuleId,
+    name: "Smoke Proxy Only Stream Rule",
+    priority: 1,
+    match_protocol: "openai_chat",
+    match_model_pattern: onlyStreamRequestModel,
+    upstream_protocol: "openai_chat",
+    target_provider_id: onlyStreamProviderId,
     target_model: openAITargetModel,
     enabled: true,
   });
@@ -547,6 +680,24 @@ try {
     target_model: responsesTargetModel,
     enabled: true,
   });
+  data("POST", "/api/v1/routing-rules", {
+    id: responsesFromAnthropicRuleId,
+    name: "Smoke Proxy Anthropic To Responses Rule",
+    priority: 3,
+    match_protocol: "anthropic",
+    match_model_pattern: responsesRequestModel,
+    upstream_protocol: "openai_responses",
+    target_provider_id: responsesProviderId,
+    target_model: responsesTargetModel,
+    enabled: true,
+  });
+
+  data("POST", "/api/v1/ingress-endpoints", {
+    id: customEndpointId,
+    path: customEndpointPath,
+    downstream_protocol: "openai_chat",
+    enabled: true,
+  });
 
   let anthropicResponse = proxyChat({
     model: anthropicRequestModel,
@@ -588,11 +739,39 @@ try {
   assert(openAIResponse.choices[0].message.content === "openai upstream ok", "OpenAI proxy content mismatch");
   assert(openAIResponse.usage.total_tokens === 18, "OpenAI proxy usage mismatch");
 
+  let requestIDResponse = proxyChatWithHeaders({
+    model: openAIRequestModel,
+    messages: [{
+      role: "user",
+      content: "hello request id",
+    }],
+  }, {
+    "X-Request-ID": "req-smoke-fixed-" + suffix,
+  });
+  assert(requestIDResponse.object === "chat.completion", "Request ID proxy response object mismatch");
+
   let openAITraffic = latestTrafficFor(openAIRequestModel);
   assert(openAITraffic !== undefined, "OpenAI proxy traffic missing");
   assert(openAITraffic.input_tokens === 11, "OpenAI proxy input tokens missing");
   assert(openAITraffic.output_tokens === 7, "OpenAI proxy output tokens missing");
   assert(openAITraffic.total_tokens === 18, "OpenAI proxy total tokens missing");
+  assert(openAITraffic.client_ip === "127.0.0.1" || openAITraffic.client_ip === "::1", "OpenAI proxy client ip missing: " + JSON.stringify(openAITraffic));
+  assert(openAITraffic.matched_rule_id === openAIRuleId, "OpenAI proxy matched rule id missing: " + JSON.stringify(openAITraffic));
+  assert(openAITraffic.matched_rule_name === "Smoke Proxy OpenAI Rule", "OpenAI proxy matched rule name missing: " + JSON.stringify(openAITraffic));
+
+  let requestIDTraffic = trafficByRequestID("req-smoke-fixed-" + suffix);
+  assert(requestIDTraffic !== undefined, "X-Request-ID should be preserved in traffic: traffic=" + JSON.stringify(trafficSnapshot()) + " lastMock=" + JSON.stringify(mockRequests[mockRequests.length - 1] || {}));
+
+  let customEndpointResponse = proxyCustomChat({
+    model: openAIRequestModel,
+    messages: [{
+      role: "user",
+      content: "hello custom endpoint",
+    }],
+  });
+  assert(customEndpointResponse.object === "chat.completion", "Custom endpoint response object mismatch");
+  assert(customEndpointResponse.model === openAITargetModel, "Custom endpoint response model mismatch");
+  assert(customEndpointResponse.choices[0].message.content === "openai upstream ok", "Custom endpoint content mismatch");
 
   let streamResponse = proxyChatStream({
     model: openAIRequestModel,
@@ -613,6 +792,23 @@ try {
   let streamTraffic = latestTrafficFor(openAIRequestModel);
   assert(streamTraffic !== undefined, "OpenAI stream traffic missing");
   assert(streamTraffic.status_code === 200, "OpenAI stream traffic status mismatch");
+
+  let onlyStreamResponse = proxyChat({
+    model: onlyStreamRequestModel,
+    messages: [{
+      role: "user",
+      content: "hello only stream provider",
+    }],
+  });
+  assert(onlyStreamResponse.object === "chat.completion", "Only-stream aggregate object mismatch");
+  assert(onlyStreamResponse.choices[0].message.content === "stream ok", "Only-stream aggregate content mismatch: " + JSON.stringify(onlyStreamResponse));
+  assert(onlyStreamResponse.usage.prompt_tokens === 21, "Only-stream aggregate prompt tokens mismatch");
+  assert(onlyStreamResponse.usage.completion_tokens === 8, "Only-stream aggregate completion tokens mismatch");
+
+  let onlyStreamTraffic = latestTrafficFor(onlyStreamRequestModel);
+  assert(onlyStreamTraffic !== undefined, "Only-stream aggregate traffic missing");
+  assert(onlyStreamTraffic.input_tokens === 21, "Only-stream aggregate traffic input tokens mismatch: " + JSON.stringify(onlyStreamTraffic));
+  assert(onlyStreamTraffic.output_tokens === 8, "Only-stream aggregate traffic output tokens mismatch: " + JSON.stringify(onlyStreamTraffic));
 
   let responsesViaChat = proxyResponses({
     model: openAIRequestModel,
@@ -676,6 +872,10 @@ try {
   }
   assert(String(responsesStreamViaChatBody || "").indexOf("response.output_text.delta") >= 0, "Responses stream via Chat event mismatch");
   assert(String(responsesStreamViaChatBody || "").indexOf("stream ok") >= 0, "Responses stream via Chat body mismatch: " + String(responsesStreamViaChatBody || ""));
+  let responsesStreamViaChatTraffic = latestTrafficFor(openAIRequestModel);
+  assert(responsesStreamViaChatTraffic.input_tokens === 21, "Responses stream via Chat traffic input tokens mismatch: " + JSON.stringify(responsesStreamViaChatTraffic));
+  assert(responsesStreamViaChatTraffic.output_tokens === 8, "Responses stream via Chat traffic output tokens mismatch: " + JSON.stringify(responsesStreamViaChatTraffic));
+  assert(responsesStreamViaChatTraffic.total_tokens === 29, "Responses stream via Chat traffic total tokens mismatch: " + JSON.stringify(responsesStreamViaChatTraffic));
 
   let chatStreamViaResponses = proxyChatStream({
     model: responsesRequestModel,
@@ -728,6 +928,88 @@ try {
   }
   assert(String(convertedOpenAIStreamBody || "").indexOf("content_block_delta") >= 0, "OpenAI converted stream should be Anthropic events");
   assert(String(convertedOpenAIStreamBody || "").indexOf("stream ok") >= 0, "OpenAI converted stream body mismatch: " + String(convertedOpenAIStreamBody || ""));
+  let invalidSSERequestID = "req-smoke-invalid-sse-" + suffix;
+  let invalidSSEResponse = http.stream({
+    url: bridgeBase + "/v1/responses",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Request-ID": invalidSSERequestID,
+      Authorization: "Bearer " + proxySecret,
+    },
+    body: {
+      model: openAIRequestModel,
+      stream: true,
+      input: "please send invalid sse",
+    },
+  });
+  assert(Number(invalidSSEResponse.status || 0) === 200, "Invalid SSE converted stream status mismatch");
+  let invalidSSEBody = invalidSSEResponse.body.readAll();
+  if (invalidSSEResponse.close) {
+    invalidSSEResponse.close();
+  }
+  assert(String(invalidSSEBody || "").indexOf("response.created") >= 0, "Invalid SSE converted stream should still start response events");
+  let invalidSSETraffic = trafficByRequestID(invalidSSERequestID);
+  assert(invalidSSETraffic !== undefined, "Invalid SSE traffic missing: traffic=" + JSON.stringify(trafficSnapshot()));
+  assert(String(invalidSSETraffic.error || "").indexOf("invalid SSE JSON") >= 0, "Invalid SSE traffic error mismatch: " + JSON.stringify(invalidSSETraffic));
+
+  let jsonFallbackResponse = proxyResponsesStream({
+    model: openAIRequestModel,
+    stream: true,
+    stream_options: {
+      include_usage: true,
+    },
+    input: "please use json fallback",
+  });
+  assert(Number(jsonFallbackResponse.status || 0) === 200, "JSON fallback stream status mismatch");
+  let jsonFallbackBody = jsonFallbackResponse.body.readAll();
+  if (jsonFallbackResponse.close) {
+    jsonFallbackResponse.close();
+  }
+  assert(String(jsonFallbackBody || "").indexOf("response.output_text.delta") >= 0, "JSON fallback stream missing response delta: " + String(jsonFallbackBody || ""));
+  assert(String(jsonFallbackBody || "").indexOf("json fallback ok") >= 0, "JSON fallback stream missing content: " + String(jsonFallbackBody || ""));
+  assert(String(jsonFallbackBody || "").indexOf("response.completed") >= 0, "JSON fallback stream missing completed event: " + String(jsonFallbackBody || ""));
+
+  let emptyStreamRequestID = "req-smoke-empty-stream-" + suffix;
+  let emptyStreamResponse = http.request({
+    url: bridgeBase + "/v1/responses",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Request-ID": emptyStreamRequestID,
+      Authorization: "Bearer " + proxySecret,
+    },
+    body: {
+      model: openAIRequestModel,
+      stream: true,
+      input: "please send empty sse",
+    },
+  });
+  assert(Number(emptyStreamResponse.status || 0) === 502, "Empty stream should return 502: status=" + String(emptyStreamResponse.status || "") + " body=" + String(emptyStreamResponse.body || ""));
+  let emptyStreamTraffic = trafficByRequestID(emptyStreamRequestID);
+  assert(emptyStreamTraffic !== undefined, "Empty stream traffic missing: traffic=" + JSON.stringify(trafficSnapshot()));
+  assert(String(emptyStreamTraffic.error || "").indexOf("empty upstream stream") >= 0, "Empty stream traffic error mismatch: " + JSON.stringify(emptyStreamTraffic));
+
+  let errorEventRequestID = "req-smoke-error-event-" + suffix;
+  let errorEventResponse = http.request({
+    url: bridgeBase + "/v1/responses",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Request-ID": errorEventRequestID,
+      Authorization: "Bearer " + proxySecret,
+    },
+    body: {
+      model: openAIRequestModel,
+      stream: true,
+      input: "please send error event",
+    },
+  });
+  assert(Number(errorEventResponse.status || 0) === 502, "Error event stream should return 502: status=" + String(errorEventResponse.status || "") + " body=" + String(errorEventResponse.body || ""));
+  assert(String(errorEventResponse.body || "").indexOf("stream exploded") >= 0, "Error event response body mismatch: " + String(errorEventResponse.body || ""));
+  let errorEventTraffic = trafficByRequestID(errorEventRequestID);
+  assert(errorEventTraffic !== undefined, "Error event traffic missing: traffic=" + JSON.stringify(trafficSnapshot()));
+  assert(String(errorEventTraffic.error || "").indexOf("stream exploded") >= 0, "Error event traffic mismatch: " + JSON.stringify(errorEventTraffic));
 
   let chatToolStreamViaAnthropic = proxyChatStream({
     model: anthropicRequestModel,
@@ -779,12 +1061,49 @@ try {
   assert(String(responsesToolStreamViaChatBody || "").indexOf("response.function_call_arguments.delta") >= 0, "Responses tool stream via Chat missing arguments delta: " + String(responsesToolStreamViaChatBody || ""));
   assert(String(responsesToolStreamViaChatBody || "").indexOf("get_weather") >= 0, "Responses tool stream via Chat missing name: " + String(responsesToolStreamViaChatBody || ""));
 
+  let chatToolStreamViaResponses = proxyChatStream({
+    model: responsesRequestModel,
+    stream: true,
+    messages: [{
+      role: "user",
+      content: "please use tool stream",
+    }],
+  });
+  assert(Number(chatToolStreamViaResponses.status || 0) === 200, "Chat tool stream via Responses status mismatch");
+  let chatToolStreamViaResponsesBody = chatToolStreamViaResponses.body.readAll();
+  if (chatToolStreamViaResponses.close) {
+    chatToolStreamViaResponses.close();
+  }
+  assert(String(chatToolStreamViaResponsesBody || "").indexOf("tool_calls") >= 0, "Chat tool stream via Responses missing tool_calls: " + String(chatToolStreamViaResponsesBody || ""));
+  assert(String(chatToolStreamViaResponsesBody || "").indexOf("get_weather") >= 0, "Chat tool stream via Responses missing name: " + String(chatToolStreamViaResponsesBody || ""));
+  assert(String(chatToolStreamViaResponsesBody || "").indexOf("Shanghai") >= 0, "Chat tool stream via Responses missing arguments: " + String(chatToolStreamViaResponsesBody || ""));
+  assert(String(chatToolStreamViaResponsesBody || "").indexOf("tool_calls") >= 0, "Chat tool stream via Responses missing finish reason: " + String(chatToolStreamViaResponsesBody || ""));
+
+  let anthropicToolStreamViaResponses = proxyAnthropicStream({
+    model: responsesRequestModel,
+    stream: true,
+    messages: [{
+      role: "user",
+      content: "please use tool stream",
+    }],
+    max_tokens: 32,
+  });
+  assert(Number(anthropicToolStreamViaResponses.status || 0) === 200, "Anthropic tool stream via Responses status mismatch");
+  let anthropicToolStreamViaResponsesBody = anthropicToolStreamViaResponses.body.readAll();
+  if (anthropicToolStreamViaResponses.close) {
+    anthropicToolStreamViaResponses.close();
+  }
+  assert(String(anthropicToolStreamViaResponsesBody || "").indexOf("\"tool_use\"") >= 0, "Anthropic tool stream via Responses missing tool_use: " + String(anthropicToolStreamViaResponsesBody || ""));
+  assert(String(anthropicToolStreamViaResponsesBody || "").indexOf("input_json_delta") >= 0, "Anthropic tool stream via Responses missing input_json_delta: " + String(anthropicToolStreamViaResponsesBody || ""));
+  assert(String(anthropicToolStreamViaResponsesBody || "").indexOf("get_weather") >= 0, "Anthropic tool stream via Responses missing name: " + String(anthropicToolStreamViaResponsesBody || ""));
+
   let sawOpenAI = false;
   let sawAnthropic = false;
   let sawOpenAIStream = false;
   let sawAnthropicStream = false;
   let sawResponses = false;
   let sawResponsesStream = false;
+  let sawOnlyStreamAggregate = false;
   for (let item of mockRequests) {
     if (item.path === "/v1/chat/completions" && item.body.model === openAITargetModel) {
       sawOpenAI = true;
@@ -804,6 +1123,15 @@ try {
     if (item.path === "/v1/responses" && item.body.model === responsesTargetModel && item.body.stream === true) {
       sawResponsesStream = true;
     }
+    if (item.path === "/v1/chat/completions" && item.body.model === openAITargetModel && item.body.stream === true) {
+      let text = "";
+      for (let message of item.body.messages || []) {
+        text = text + contentText(message.content);
+      }
+      if (text.indexOf("only stream provider") >= 0) {
+        sawOnlyStreamAggregate = true;
+      }
+    }
   }
   assert(sawOpenAI, "mock upstream did not receive OpenAI chat request");
   assert(sawOpenAIStream, "mock upstream did not receive OpenAI stream request");
@@ -811,6 +1139,7 @@ try {
   assert(sawAnthropicStream, "mock upstream did not receive converted Anthropic stream request");
   assert(sawResponses, "mock upstream did not receive Responses request");
   assert(sawResponsesStream, "mock upstream did not receive Responses stream request");
+  assert(sawOnlyStreamAggregate, "mock upstream did not receive only-stream aggregate request as stream");
 
   println("proxy smoke ok");
 } finally {

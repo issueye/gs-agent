@@ -1,0 +1,24 @@
+{
+  "gateway": [
+    {
+      "id": "ver-seed-001",
+      "version": "0.1.0",
+      "previousVersion": null,
+      "action": "install",
+      "status": "success",
+      "operator": "system",
+      "timestamp": "2026-06-12T00:00:00.000Z"
+    }
+  ],
+  "llm-bridge": [
+    {
+      "id": "ver-seed-002",
+      "version": "0.1.0",
+      "previousVersion": null,
+      "action": "install",
+      "status": "success",
+      "operator": "system",
+      "timestamp": "2026-06-12T00:00:00.000Z"
+    }
+  ]
+}

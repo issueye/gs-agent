@@ -92,8 +92,28 @@ Acceptance:
 - The package contains `src`, `docs`, `config.example.toml`, `project.toml`, `main.gs`, smoke scripts, and `README.md`.
 - Streaming requests do not buffer entire upstream responses for same-protocol forwarding.
 - Responses text requests and text streams convert to and from OpenAI Chat and Anthropic. Full multimodal/tool-call parity remains future work.
+- Stream converters also cover common tool-call deltas and record upstream usage/error details when the SSE payload exposes them.
 - Traffic list remains bounded and does not leak full request bodies unless explicitly enabled.
 - Smoke scripts pass from a clean checkout.
+
+## Phase 5: Replacement Readiness
+
+Status: in progress
+
+P0 deliverables:
+
+- Make configured ingress endpoints active in dynamic proxy routing, not just CRUD data.
+- Finish tool-call stream conversion for Responses-to-Chat and Responses-to-Anthropic directions.
+- Define a concrete migration path from the Go bridge SQLite databases to the GoScript store.
+- Add a replacement-gap checklist that maps the Go bridge HTTP contract to smoke coverage.
+- Keep documented startup commands aligned with the current GoScript runner entrypoint.
+- Support `only_stream` providers for non-stream downstream callers by aggregating upstream SSE into downstream JSON.
+
+P1 deliverables:
+
+- Restore production details from the Go bridge where needed: stream preflight handling, additional auth negative cases, and matched rule traffic field coverage.
+- Expand converter fixtures for multimodal content, tool result messages, and multi-tool-call streams.
+- Decide whether long-term storage remains JSON-backed or moves to a GTS SQLite module.
 
 ## Worker Split
 

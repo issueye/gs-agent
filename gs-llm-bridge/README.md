@@ -11,14 +11,14 @@ Development plan: [docs/development-plan.md](docs/development-plan.md).
 From `E:\codes\gts_codes\gs-llm-bridge`:
 
 ```powershell
-..\gts\gs.exe --timeout 0 run
+..\gts\gs.exe --timeout 0 main.gs
 ```
 
 Or from `E:\codes\gts_codes`:
 
 ```powershell
 Push-Location .\gs-llm-bridge
-..\gts\gs.exe --timeout 0 run
+..\gts\gs.exe --timeout 0 main.gs
 Pop-Location
 ```
 
@@ -29,13 +29,13 @@ To run beside another bridge or another worker's service, choose a separate port
 ```powershell
 $env:GS_LLM_BRIDGE_PORT = "18182"
 $env:GS_LLM_BRIDGE_DATA_DIR = ".data-smoke-18182"
-..\gts\gs.exe --timeout 0 run
+..\gts\gs.exe --timeout 0 main.gs
 ```
 
 Equivalent command-line overrides are also supported:
 
 ```powershell
-..\gts\gs.exe --timeout 0 run --addr 127.0.0.1:18182 --data-dir .data-smoke-18182
+..\gts\gs.exe --timeout 0 main.gs --addr 127.0.0.1:18182 --data-dir .data-smoke-18182
 ```
 
 ## Smoke Tests
@@ -48,6 +48,29 @@ $env:GS_LLM_BRIDGE_SMOKE_PORT = "18182"
 ```
 
 The smoke script checks health, runtime state, provider/model/rule/API-key management, and traffic recording. See [docs/smoke-tests.md](docs/smoke-tests.md).
+
+## SQLite Migration
+
+To migrate data from the old `icoo_llm_bridge` SQLite files into the local JSON store, run a dry-run first:
+
+```powershell
+.\scripts\migrate-sqlite-to-store.ps1 `
+  -SqliteDb E:\codes\icoo_proxy\icoo_llm_bridge\.data\icoo_llm_bridge.db `
+  -TrafficDb E:\codes\icoo_proxy\icoo_llm_bridge\.data\icoo_llm_bridge_traffic.db `
+  -Out .data\store.json `
+  -IncludeTraffic false `
+  -DryRun
+```
+
+When the printed counts look right, rerun without `-DryRun`. Add `-IncludeTraffic true -TrafficLimit 2000` to import recent traffic records. Existing `store.json` data is merged and backed up by default.
+
+Validate the migration helper itself with:
+
+```powershell
+.\scripts\test-migration-static.ps1
+```
+
+See [docs/migration-plan.md](docs/migration-plan.md) for field mappings, warnings, and the expected count summary format.
 
 ## Packaging
 

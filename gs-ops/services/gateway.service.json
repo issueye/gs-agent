@@ -1,0 +1,21 @@
+{
+  "serviceId": "gateway",
+  "name": "gs-gateway",
+  "commands": {
+    "install": "make install",
+    "start": "gs-gateway.exe",
+    "stop": "taskkill /PID ${pid} /F",
+    "restart": "restart",
+    "status": "status",
+    "uninstall": "make uninstall"
+  },
+  "environment": {
+    "GATEWAY_PORT": "8080"
+  },
+  "healthCheck": {
+    "enabled": true,
+    "interval": 30,
+    "url": "http://127.0.0.1:8080/health"
+  }
+}
+

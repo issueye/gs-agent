@@ -1,5 +1,14 @@
 import { ProtocolAnthropic, ProtocolOpenAIChat, ProtocolOpenAIResponses } from "@/services/protocols";
 
+function requestPath(url) {
+  let text = String(url || "");
+  let queryIndex = text.indexOf("?");
+  if (queryIndex >= 0) {
+    text = text.slice(0, queryIndex);
+  }
+  return text;
+}
+
 export function createProxyController(model) {
   function anthropic(req, res) {
     return model.proxy.handle(req, res, ProtocolAnthropic);
@@ -14,14 +23,9 @@ export function createProxyController(model) {
   }
 
   function dynamic(req, res) {
-    if (req.url === "/v1/messages") {
-      return anthropic(req, res);
-    }
-    if (req.url === "/v1/responses") {
-      return openaiResponses(req, res);
-    }
-    if (req.url === "/v1/chat/completions") {
-      return openaiChat(req, res);
+    let endpoint = model.store.findEnabledEndpointByPath(requestPath(req.url));
+    if (endpoint) {
+      return model.proxy.handle(req, res, endpoint.downstream_protocol);
     }
     return res.status(404).json({
       error: {
