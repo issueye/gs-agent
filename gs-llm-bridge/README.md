@@ -4,7 +4,7 @@
 
 It exposes Anthropic Messages, OpenAI Chat Completions, and OpenAI Responses compatible entrypoints, plus a small management API for providers, models, routing rules, API keys, and traffic records.
 
-Development plan: [docs/development-plan.md](docs/development-plan.md).
+Development plan: [docs/planning/development-plan.md](docs/planning/development-plan.md).
 
 ## Run
 
@@ -47,7 +47,7 @@ $env:GS_LLM_BRIDGE_SMOKE_PORT = "18182"
 ..\gts\gs.exe --timeout 0 smoke-management.gs
 ```
 
-The smoke script checks health, runtime state, provider/model/rule/API-key management, and traffic recording. See [docs/smoke-tests.md](docs/smoke-tests.md).
+The smoke script checks health, runtime state, provider/model/rule/API-key management, and traffic recording. See [docs/testing/smoke-tests.md](docs/testing/smoke-tests.md).
 
 ## SQLite Migration
 
@@ -70,7 +70,7 @@ Validate the migration helper itself with:
 .\scripts\test-migration-static.ps1
 ```
 
-See [docs/migration-plan.md](docs/migration-plan.md) for field mappings, warnings, and the expected count summary format.
+See [docs/planning/migration-plan.md](docs/planning/migration-plan.md) for field mappings, warnings, and the expected count summary format.
 
 ## Packaging
 
